@@ -5,7 +5,8 @@ FlyMotion turns what you say into motion for a small robot. "Avance d'un mètre,
 ```sh
 ollama pull Tromset/flymotion0.1lite
 python3 -m flymotion "avance d'un mètre, tourne à droite puis frappe le ballon du pied gauche"
-# FlyMotion: J'avance d'un mètre, je tourne à droite puis je frappe le ballon du pied gauche.
+# FlyMotion: Je vais avancer d'un mètre, tourner à droite et ensuite frapper le ballon avec mon pied gauche.
+#   (3 steps, 11.0 s of motion, planned in 16.49 s)
 #   sim: x=+1.00 m, y=+0.00 m, heading=-90 degrees, skills: kick_left
 ```
 
@@ -15,8 +16,8 @@ FlyMotion is built like [FlyCoder](https://github.com/Tromset/flycoder): an open
 
 | Model | Base | Weights | Runs on | Benchmark |
 |---|---|---|---|---|
-| [`Tromset/flymotion0.1`](https://ollama.com/Tromset/flymotion0.1) | Qwen3.5 4B | 3.3 GB | any computer with 8 GB | BENCH_FULL |
-| [`Tromset/flymotion0.1lite`](https://ollama.com/Tromset/flymotion0.1lite) | Qwen3.5 2B | 2.7 GB | Raspberry Pi 5, 4 GB computers | BENCH_LITE |
+| [`Tromset/flymotion0.1`](https://ollama.com/Tromset/flymotion0.1) | Qwen3.5 4B | 3.3 GB | any computer with 8 GB | 35/36 |
+| [`Tromset/flymotion0.1lite`](https://ollama.com/Tromset/flymotion0.1lite) | Qwen3.5 2B | 2.7 GB | Raspberry Pi 5, 4 GB computers | 35/36 |
 
 Benchmark: 32 French and English requests, each planned, played in the simulator and checked on what the robot would actually do (final position, heading, head, skills, refusals). Details below.
 
@@ -106,7 +107,11 @@ ollama create flymotion0.1lite -f Modelfile.lite
 python3 bench/run.py --model flymotion0.1lite
 ```
 
-BENCH_TABLE
+| Model | Passed | Median planning time | Missed |
+|---|---|---|---|
+| `flymotion0.1` (Qwen3.5 4B) | 35/36 | 18.8 s | "Avance un peu": walked 0.5 m instead of about 0.2 m |
+| `flymotion0.1lite` (Qwen3.5 2B) | 35/36 | 11.7 s | the 50 cm square: repeated four times, but alternated left and right turns |
+| First version, signed numbers (2B, 32 requests) | 22/32 | 10.4 s | left and right swapped in 7 requests |
 
 Results in `docs/bench/`. Planning times are on a 4-core server without a GPU; on an Apple Silicon Mac they are several times shorter.
 

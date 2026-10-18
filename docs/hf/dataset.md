@@ -29,7 +29,7 @@ French and English requests for a small walking robot ([Microduck](https://githu
 {"messages": [
   {"role": "system", "content": "You are FlyMotion, the motion planner of a small robot..."},
   {"role": "user", "content": "Tourne à droite, ensuite avance 300 cm"},
-  {"role": "assistant", "content": "{\"say\": \"Je tourne de 90 degrés vers la droite, puis j'avance de 3 m.\", \"steps\": [{\"action\": \"turn\", \"direction\": \"right\", \"degrees\": 90}, {\"action\": \"walk\", \"direction\": \"forward\", \"meters\": 3}]}"}
+  {"role": "assistant", "content": "{\"say\": \"Je tourne de 90 degrés vers la droite, puis j'avance de 3 m.\", \"repeat\": 1, \"steps\": [{\"action\": \"turn\", \"direction\": \"right\", \"degrees\": 90}, {\"action\": \"walk\", \"direction\": \"forward\", \"meters\": 3}]}"}
 ], "lang": "fr"}
 ```
 

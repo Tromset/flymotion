@@ -10,7 +10,7 @@ python3 -m flymotion "fais un carré de 50 cm puis salue"
 
 | Base | Size | Runs on | Benchmark |
 |---|---|---|---|
-| Qwen3.5 4B (Apache 2.0) | 3.3 GB | any computer with 8 GB | BENCH_FULL |
+| Qwen3.5 4B (Apache 2.0) | 3.3 GB | any computer with 8 GB | 35/36 (36 French and English requests) |
 
 - **Plans in words**: walk forward, backward, left or right; turn; circle; look; the robot's skills (kicks, roll, pick up, sit, bow); shapes with repeat. The bridge turns them into velocities and durations, so the model never gets a sign wrong.
 - **Safe by construction**: every plan is validated and clamped to the robot's limits, and always ends with a stop. Requests that are impossible or could hurt someone are refused.

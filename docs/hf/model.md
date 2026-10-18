@@ -30,10 +30,10 @@ python3 -m flymotion "fais un carré de 50 cm puis salue"       # simulator
 python3 -m flymotion --transport robot                          # on the robot
 ```
 
-| Model | Base | Weights | Benchmark (BENCH_TOTAL requests) | Median planning time, 4-core CPU |
+| Model | Base | Weights | Benchmark (36 requests) | Median planning time, 4-core CPU |
 |---|---|---|---|---|
-| `Tromset/flymotion0.1` | Qwen3.5 4B | 3.3 GB | BENCH_FULL | BENCH_FULL_TIME |
-| `Tromset/flymotion0.1lite` | Qwen3.5 2B | 2.7 GB | BENCH_LITE | BENCH_LITE_TIME |
+| `Tromset/flymotion0.1` | Qwen3.5 4B | 3.3 GB | 35/36 | 18.8 s |
+| `Tromset/flymotion0.1lite` | Qwen3.5 2B | 2.7 GB | 35/36 | 11.7 s |
 
 ## What is in this repository
 
@@ -50,7 +50,7 @@ Version 0.1 does not retrain the weights: the gains come from the plan format, t
 The model writes words, the bridge does the physics:
 
 ```json
-{"say": "Je tourne à droite et je regarde en haut.",
+{"say": "Je tourne à droite et je regarde en haut.", "repeat": 1,
  "steps": [{"action": "turn", "direction": "right", "degrees": 90}, {"action": "head", "look": "up"}]}
 ```
 

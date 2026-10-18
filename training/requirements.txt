@@ -1,0 +1,7 @@
+# For training/train.py (LoRA fine-tuning). The bridge and the benchmark need only the Python standard library.
+torch>=2.6
+transformers>=4.57
+datasets>=4.0
+peft>=0.17
+trl>=0.24
+accelerate>=1.10

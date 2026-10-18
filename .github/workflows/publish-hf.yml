@@ -1,0 +1,44 @@
+name: publish-hf
+# Every change to main that touches the dataset generator, the prompt, a robot profile, a Modelfile or a Hub page
+# republishes Tromset/flymotion-commands (dataset) and Tromset/flymotion (model) on the Hugging Face Hub.
+# Needs one repository secret: HF_TOKEN, a write token from https://huggingface.co/settings/tokens
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'training/build_dataset.py'
+      - 'flymotion/prompt.py'
+      - 'flymotion/plan.py'
+      - 'robots/**'
+      - 'Modelfile*'
+      - 'docs/hf/**'
+      - 'docs/bench/**'
+      - 'scripts/publish_hf.py'
+      - '.github/workflows/publish-hf.yml'
+  workflow_dispatch:
+    inputs:
+      what:
+        description: 'What to publish: dataset, model, or dataset,model'
+        default: dataset,model
+concurrency:
+  group: publish-hf
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'Tromset/flymotion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Check the secret
+        run: '[ -n "$HF_TOKEN" ] || { echo "::error::Add the HF_TOKEN secret (a write token from https://huggingface.co/settings/tokens)."; exit 1; }'
+      - run: pip install 'huggingface_hub>=0.34'
+      - name: Publish
+        env:
+          WHAT: ${{ inputs.what || 'dataset,model' }}
+        run: python scripts/publish_hf.py --owner Tromset --what "$WHAT"

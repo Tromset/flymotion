@@ -18,6 +18,7 @@ from flymotion.plan import PlanError, compile_plan, duration, load_profile, pars
 from flymotion.planner import Planner  # noqa: E402
 from flymotion.prompt import EXAMPLES, system_prompt  # noqa: E402
 from flymotion.robot import LineTransport, SimTransport, execute  # noqa: E402
+from flymotion.serve import Server  # noqa: E402
 import build_dataset  # noqa: E402
 import run as bench  # noqa: E402
 
@@ -215,6 +216,106 @@ class PlannerTest(unittest.TestCase):
         for _ in range(5):
             planner.plan('hello')
         self.assertEqual(len(planner.history), 10)
+
+
+def robotd(path, received):
+    """A minimal robotd on a Unix socket: records every message, answers requests."""
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(path)
+    server.listen(1)
+
+    def serve():
+        connection, _ = server.accept()
+        with connection, connection.makefile('rw', newline='\n') as stream:
+            for line in stream:
+                message = json.loads(line)
+                received.append(message)
+                if 'id' in message:
+                    stream.write(json.dumps({'jsonrpc': '2.0', 'id': message['id'], 'result': {}}) + '\n')
+                    stream.flush()
+
+    threading.Thread(target=serve, daemon=True).start()
+    return server
+
+
+class ServeTest(unittest.TestCase):
+    PLAN = {'say': 'ok', 'steps': [{'action': 'walk', 'direction': 'forward', 'meters': 1}, {'action': 'turn', 'direction': 'left'}]}
+
+    def server(self):
+        written = []
+        server = Server(PROFILE, chat=lambda messages, format_schema: json.dumps(self.PLAN), write=written.append)
+        return server, written
+
+    def test_plans_compile_and_report_errors(self):
+        server, written = self.server()
+        server.answer({'id': 1, 'type': 'plan', 'request': 'avance d un mètre et tourne à gauche'})
+        server.answer({'id': 2, 'type': 'compile', 'plan': {'say': '', 'steps': [{'action': 'fly'}]}})
+        server.answer({'id': 3, 'type': 'dance'})
+        plan, invalid, unknown = written
+        self.assertTrue(plan['ok'])
+        self.assertEqual(plan['commands'][-1], {'kind': 'stop'})
+        self.assertAlmostEqual(plan['sim']['x'], 1, delta=0.02)
+        self.assertAlmostEqual(plan['sim']['heading'], 90, delta=1)
+        self.assertEqual((invalid['id'], invalid['ok']), (2, False))
+        self.assertIn('unknown action', invalid['error'])
+        self.assertFalse(unknown['ok'])
+
+    def test_the_simulator_profile_plans_but_never_drives_a_robot(self):
+        server, written = self.server()
+        server.answer({'id': 1, 'type': 'profile', 'robot': 'microduck-sim'})
+        server.answer({'id': 2, 'type': 'plan', 'request': 'avance'})
+        server.answer({'id': 3, 'type': 'run', 'plan': self.PLAN, 'robot': 'microduck-sim', 'target': 'tcp:127.0.0.1:9'})
+        server.answer({'id': 4, 'type': 'profile', 'robot': '../robots/microduck'})
+        server.answer({'id': 5, 'type': 'run', 'plan': self.PLAN, 'robot': 'microduck', 'target': 'print'})
+        switched, plan, refused, unknown, printed = written
+        self.assertEqual(switched['profile']['name'], 'microduck-sim')
+        self.assertEqual(plan['commands'][0]['vx'], 0.25)  # the simulated walker only starts above about 0.22 m/s
+        self.assertAlmostEqual(plan['sim']['x'], 1, delta=0.02)
+        self.assertIn('simulator profile', refused['error'])
+        self.assertIn('unknown robot', unknown['error'])
+        self.assertIn('cannot run from serve', printed['error'])  # robotd lines would mix with the protocol
+
+    def test_a_run_drives_robotd_with_the_robot_profile_and_stops_on_request(self):
+        path = os.path.join(tempfile.mkdtemp(), 'robotd.sock')
+        received = []
+        socket_server = robotd(path, received)
+        server, written = self.server()
+        server.profile = load_profile('microduck-sim')  # planning for the simulator does not change how the robot moves
+        run = threading.Thread(target=server.answer, args=({'id': 1, 'type': 'run', 'plan': self.PLAN, 'robot': 'microduck', 'target': f'unix:{path}'},))
+        run.start()
+        for _ in range(500):  # wait for the robot to start moving
+            if any(m.get('method') == 'robot.move' for m in list(received)):
+                break
+            run.join(0.01)
+        server.answer({'id': 2, 'type': 'run', 'plan': self.PLAN, 'robot': 'microduck', 'target': f'unix:{path}'})
+        server.answer({'id': 3, 'type': 'stop'})
+        run.join(2)
+        socket_server.close()
+        busy, stop, reply = [m for m in written if 'event' not in m]
+        self.assertIn('already running', busy['error'])
+        self.assertEqual(stop, {'id': 3, 'ok': True, 'running': True, 'elapsed': stop['elapsed']})
+        self.assertEqual((reply['id'], reply['stopped']), (1, True))
+        self.assertEqual(received[0]['params'], {'vx': 0.2, 'vy': 0.0, 'vyaw': 0.0})  # microduck cruise, not the simulator's
+        self.assertEqual(received[-1]['method'], 'robot.stop')
+        self.assertEqual([m['index'] for m in written if m.get('event') == 'command'], [0])
+
+    def test_serve_answers_in_order_until_the_end_of_input(self):
+        server, written = self.server()
+        lines = ['{"id": 1, "type": "profile", "robot": "microduck-sim"}', 'not json', '',
+                 json.dumps({'id': 2, 'type': 'compile', 'plan': self.PLAN}), '{"id": 3, "type": "hello"}']
+        server.serve(iter(lines))
+        self.assertEqual([m['id'] for m in written], [None, 1, 2, 3])
+        self.assertEqual(written[2]['commands'][0]['vx'], 0.25)
+        self.assertIn({'name': 'microduck-sim', 'title': load_profile('microduck-sim')['title'], 'simulated': True}, written[3]['robots'])
+
+    def test_every_robot_profile_compiles_the_prompt_examples(self):
+        for path in sorted((ROOT / 'robots').glob('*.json')):
+            profile = load_profile(path.stem)
+            self.assertEqual(profile['name'], path.stem)
+            for request, plan in EXAMPLES:
+                self.assertEqual(validate(plan, profile), [], (path.stem, request))
+                commands, _ = compile_plan(plan, profile)
+                self.assertLessEqual(duration(commands), profile['limits']['plan_seconds'])
 
 
 class BenchTest(unittest.TestCase):

@@ -1,0 +1,15 @@
+{
+  "name": "flymotion-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Test app for FlyMotion: the model drives Pollen's simulated Microduck (MuJoCo + ONNX policies).",
+  "main": "main.js",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "devDependencies": {
+    "electron": "44.9.0"
+  }
+}

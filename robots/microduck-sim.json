@@ -1,0 +1,38 @@
+{
+  "name": "microduck-sim",
+  "simulated": true,
+  "title": "Microduck in Pollen's browser simulator (MuJoCo, ONNX walking policy)",
+  "notes": [
+    "For the test app (app/): Pollen's simulator at https://huggingface.co/spaces/pollen-robotics/microduck-simulator, revision ad9d41a7.",
+    "Its walker is commanded up to vx 0.25 m/s forward and 1 rad/s. Below about 0.22 m/s it does not start walking, so cruise is the maximum.",
+    "achieved: steady speeds measured in the simulator (forward 0.11 m/s at 0.25, in-place left turn 0.26 rad/s at 1, sideways 0.06 m/s at 0.3). Walking starts after about 1.5 s.",
+    "Backward walking and in-place right turns barely respond in the simulator: the app shows the gap between the plan and the physics.",
+    "Never drive the real robot with this profile: the app always runs real robots with their own profile (microduck)."
+  ],
+  "limits": {
+    "vx": 0.25,
+    "vy": 0.3,
+    "vyaw": 1.0,
+    "head_deg": 30,
+    "step_seconds": 40,
+    "plan_seconds": 60,
+    "meters": 3,
+    "degrees": 720
+  },
+  "cruise": { "vx": 0.25, "vy": 0.3, "vyaw": 1.0 },
+  "achieved": { "vx": 0.44, "vy": 0.19, "vyaw": 0.26 },
+  "head_look": { "yaw_deg": 30, "pitch_deg": 20 },
+  "head_sign": { "yaw": 1, "pitch": 1, "roll": 1 },
+  "skills": {
+    "kick_left": "kick a ball with the left foot",
+    "kick_right": "kick a ball with the right foot",
+    "roulade": "forward roll on the ground",
+    "ground_pick": "bend down and pick something up from the ground",
+    "sit_toggle": "sit down, or stand up again if already sitting",
+    "polite-bow": "polite bow to greet someone"
+  },
+  "skill_seconds": 4,
+  "rate_hz": 10,
+  "transport": "unix:/run/robotd.sock",
+  "skill_command": ["robotctl", "robot", "do", "{skill}"]
+}

@@ -1,0 +1,133 @@
+/* Dark and orange, like Pollen's Microduck simulator next to it. */
+:root {
+  --ink: #08080c;
+  --panel: #111117;
+  --raised: #1a1a22;
+  --line: #2a2a35;
+  --text: #ecebe6;
+  --muted: #8d8c96;
+  --accent: #ff6a1a;
+  --accent-ink: #1a0b02;
+  --ok: #4fd18b;
+  --warn: #f5c542;
+  --bad: #ff4d5e;
+  --display: "Anton", "Bebas Neue", "Oswald", Impact, "Arial Narrow", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body {
+  display: grid;
+  grid-template-columns: 1fr 440px;
+  background: var(--ink);
+  color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+
+#stage { display: grid; place-items: center; min-width: 0; }
+#stage-status { text-align: center; max-width: 360px; color: var(--muted); }
+#stage-status .kicker { font-family: var(--display); font-size: 28px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text); margin: 0 0 8px; }
+
+#panel {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  min-height: 0;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+}
+#panel > header, #composer, #panel > footer { padding: 14px 16px; }
+#panel > header { border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
+#panel > footer { border-top: 1px solid var(--line); display: grid; gap: 10px; }
+
+h1 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 26px; letter-spacing: 0.03em; text-transform: uppercase; }
+h1 span { color: var(--accent); }
+
+.row { display: flex; gap: 8px; align-items: center; }
+.row > select, .row > input { flex: 1; min-width: 0; }
+.row > label { width: 58px; flex: none; }
+#panel > footer .row button { white-space: nowrap; flex: 1; padding: 7px 8px; }
+#robot select { width: 100%; }
+label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+label.check { display: flex; gap: 6px; align-items: center; text-transform: none; letter-spacing: 0; font-size: 13px; flex: 1; }
+
+.pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.pill { font-size: 12px; padding: 2px 8px 2px 18px; border: 1px solid var(--line); border-radius: 999px; position: relative; color: var(--muted); }
+.pill::before { content: ""; position: absolute; left: 7px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: var(--muted); }
+.pill[data-state="ok"]::before { background: var(--ok); }
+.pill[data-state="bad"]::before { background: var(--bad); }
+.pill[data-state="busy"]::before { background: var(--accent); animation: pulse 1s infinite alternate; }
+@keyframes pulse { to { opacity: 0.25; } }
+
+select, input, textarea {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 9px;
+  outline: none;
+}
+select:focus, input:focus, textarea:focus { border-color: var(--accent); }
+textarea { width: 100%; resize: vertical; min-height: 54px; max-height: 220px; }
+
+button { border: 1px solid var(--line); background: var(--raised); border-radius: 6px; padding: 7px 12px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button:disabled { opacity: 0.45; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+button.danger { background: transparent; border-color: var(--bad); color: var(--bad); font-weight: 600; }
+button.danger:hover { background: var(--bad); color: var(--ink); }
+button.ghost { background: transparent; }
+button.icon { padding: 7px 10px; }
+kbd { font-family: var(--mono); font-size: 11px; opacity: 0.7; margin-left: 4px; }
+
+#log { overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.hint { color: var(--muted); font-size: 13px; }
+.hint p { margin: 0 0 8px; }
+
+.bubble { align-self: flex-end; max-width: 85%; background: var(--accent); color: var(--accent-ink); padding: 8px 12px; border-radius: 12px 12px 2px 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bubble.json { font-family: var(--mono); font-size: 12px; background: var(--raised); color: var(--text); border: 1px solid var(--line); }
+
+.card { background: var(--raised); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; }
+.card > header { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.card .who { font-family: var(--display); letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); font-size: 14px; }
+.card .meta { color: var(--muted); }
+.card .say { margin: 0; font-size: 15px; }
+.card.error { border-color: var(--bad); }
+.card.error .who { color: var(--bad); }
+
+.steps { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.steps li { font-family: var(--mono); font-size: 12px; padding: 2px 8px; border-radius: 4px; background: var(--ink); border: 1px solid var(--line); }
+.steps li.repeat { border-color: var(--accent); color: var(--accent); }
+.warnings { margin: 0; padding-left: 18px; color: var(--warn); font-size: 12px; }
+.warnings:empty { display: none; }
+
+.outcome { display: grid; gap: 4px; font-size: 12px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.outcome div { display: flex; justify-content: space-between; gap: 8px; }
+.outcome span { color: var(--muted); }
+.outcome b { font-family: var(--mono); font-weight: 500; }
+.outcome .gap { margin: 0; color: var(--muted); }
+.outcome .gap.off { color: var(--warn); }
+
+.commands summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.commands ol { margin: 6px 0 0; padding-left: 22px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.commands li.current { color: var(--accent); }
+.commands li.done { color: var(--text); }
+
+.actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.actions button { font-size: 12px; padding: 5px 10px; }
+
+#composer { border-top: 1px solid var(--line); display: grid; gap: 10px; }
+#form { display: grid; gap: 8px; }
+#examples { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+#examples button { flex: none; font-size: 12px; padding: 3px 9px; border-radius: 999px; background: transparent; color: var(--muted); }
+#examples button:hover { color: var(--text); border-color: var(--accent); }
+
+#robot summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+#robot[open] { display: grid; gap: 6px; }
+#robot input { width: 100%; font-family: var(--mono); font-size: 12px; }
+.note { margin: 0; color: var(--muted); font-size: 12px; }
+code { font-family: var(--mono); font-size: 11.5px; color: var(--text); }

@@ -5,6 +5,7 @@
   python -m flymotion --transport robot                                  conversation: one request per line
   python -m flymotion --plan-only "kick the ball"                        print the JSON plan only
   python -m flymotion calibrate vx --transport robot                     measure the real speed of an axis
+  python -m flymotion serve                                              JSON lines bridge for the app (app/)
 """
 import argparse
 import json
@@ -85,6 +86,9 @@ def main(argv=None):
     parser.add_argument('--yes', '-y', action='store_true', help='run on the robot without asking for confirmation')
     parser.add_argument('--verbose', '-v', action='store_true', help='print each command as it is sent')
     argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ['serve']:
+        from .serve import main as serve
+        return serve(argv[1:])
     if argv[:1] == ['calibrate']:
         sub = argparse.ArgumentParser(prog='flymotion calibrate')
         sub.add_argument('axis', choices=['vx', 'vy', 'vyaw'])

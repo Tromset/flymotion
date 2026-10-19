@@ -1,0 +1,35 @@
+{
+  "name": "microduck",
+  "title": "Microduck by Pollen Robotics (25 cm biped, 15 servos)",
+  "notes": [
+    "Velocity limits are the trained ranges of the Microduck walking policies (vx +-0.4 m/s, vy +-0.3 m/s, vyaw +-1 rad/s).",
+    "achieved: measured speed / commanded speed for your walking policy. 1.0 until you calibrate it with `python -m flymotion calibrate`.",
+    "head_look: the head angles of \"look left\", \"look up\"... head_sign: flip a sign if the head turns the wrong way on your robot."
+  ],
+  "limits": {
+    "vx": 0.4,
+    "vy": 0.3,
+    "vyaw": 1.0,
+    "head_deg": 30,
+    "step_seconds": 40,
+    "plan_seconds": 60,
+    "meters": 3,
+    "degrees": 720
+  },
+  "cruise": { "vx": 0.2, "vy": 0.15, "vyaw": 0.8 },
+  "achieved": { "vx": 1.0, "vy": 1.0, "vyaw": 1.0 },
+  "head_look": { "yaw_deg": 30, "pitch_deg": 20 },
+  "head_sign": { "yaw": 1, "pitch": 1, "roll": 1 },
+  "skills": {
+    "kick_left": "kick a ball with the left foot",
+    "kick_right": "kick a ball with the right foot",
+    "roulade": "forward roll on the ground",
+    "ground_pick": "bend down and pick something up from the ground",
+    "sit_toggle": "sit down, or stand up again if already sitting",
+    "polite-bow": "polite bow to greet someone"
+  },
+  "skill_seconds": 4,
+  "rate_hz": 10,
+  "transport": "unix:/run/robotd.sock",
+  "skill_command": ["robotctl", "robot", "do", "{skill}"]
+}

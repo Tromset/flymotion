@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'" />
+    <title>FlyMotion · Microduck</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main id="stage">
+      <!-- Pollen's simulator is laid over this area by the main process; this shows while it loads or fails. -->
+      <div id="stage-status">
+        <p class="kicker">Simulateur Microduck</p>
+        <p id="stage-message">Chargement de la physique MuJoCo et des politiques de Pollen…</p>
+        <button id="stage-reload" type="button" class="ghost">Recharger</button>
+      </div>
+    </main>
+
+    <aside id="panel">
+      <header>
+        <h1>FlyMotion <span>× Microduck</span></h1>
+        <div class="pills">
+          <span class="pill" id="pill-bridge" data-state="wait">Bridge</span>
+          <span class="pill" id="pill-ollama" data-state="wait">Ollama</span>
+          <span class="pill" id="pill-sim" data-state="wait">Simulateur</span>
+        </div>
+        <div class="row">
+          <label for="model">Modèle</label>
+          <select id="model"></select>
+          <button id="refresh-models" type="button" class="icon" title="Rafraîchir la liste des modèles">↻</button>
+        </div>
+        <div class="row">
+          <label for="profile">Profil</label>
+          <select id="profile" title="Profil avec lequel le bridge compile les plans"></select>
+        </div>
+      </header>
+
+      <section id="log" aria-live="polite">
+        <div class="hint">
+          <p>Dites au canard quoi faire. Le modèle FlyMotion planifie, le bridge compile et borne les commandes, puis le
+            Microduck simulé les exécute avec les vraies politiques de marche de Pollen.</p>
+          <p>Le simulateur garde aussi ses commandes : flèches ou ZQSD pour marcher, glisser pour tourner la caméra.</p>
+        </div>
+      </section>
+
+      <section id="composer">
+        <div id="examples"></div>
+        <form id="form">
+          <textarea id="request" rows="2" placeholder="Avance d'un mètre, tourne à droite et frappe le ballon du pied gauche"></textarea>
+          <div class="row">
+            <label class="check"><input type="checkbox" id="json-mode" /> Plan JSON (sans le modèle)</label>
+            <button id="send" type="submit" class="primary">Envoyer</button>
+          </div>
+        </form>
+      </section>
+
+      <footer>
+        <div class="row">
+          <button id="stop" type="button" class="danger">Stop <kbd>Échap</kbd></button>
+          <button id="reset-duck" type="button" class="ghost">Replacer le canard</button>
+          <button id="new-chat" type="button" class="ghost">Nouvelle conversation</button>
+        </div>
+        <details id="robot">
+          <summary>Robot réel</summary>
+          <label for="robot-profile">Profil du robot</label>
+          <select id="robot-profile" title="Le bridge recompile le plan avec ce profil avant de l'envoyer"></select>
+          <label for="target">Cible robotd</label>
+          <input id="target" value="robot" spellcheck="false" />
+          <p class="note"><code>robot</code> = socket du profil (sur le robot), sinon <code>tcp:microduck.local:7000</code>
+            derrière <code>socat TCP-LISTEN:7000,fork UNIX-CONNECT:/run/robotd.sock</code>.</p>
+          <label for="skill-command">Commande des skills</label>
+          <input id="skill-command" placeholder="ssh microduck@microduck.local robotctl robot do {skill}" spellcheck="false" />
+          <label class="check"><input type="checkbox" id="autoplay" checked /> Jouer chaque plan dans le simulateur</label>
+        </details>
+      </footer>
+    </aside>
+
+    <template id="card">
+      <article class="card">
+        <header><span class="who">FlyMotion</span><span class="meta"></span></header>
+        <p class="say"></p>
+        <ol class="steps"></ol>
+        <ul class="warnings"></ul>
+        <div class="outcome" hidden>
+          <div><span>Plan (bridge)</span><b class="ideal"></b></div>
+          <div><span>Physique (MuJoCo)</span><b class="real">en cours…</b></div>
+          <p class="gap"></p>
+        </div>
+        <details class="commands"><summary>Commandes compilées</summary><ol></ol></details>
+        <div class="actions">
+          <button type="button" class="ghost replay">Rejouer dans le simulateur</button>
+          <button type="button" class="ghost robot">Envoyer au robot</button>
+        </div>
+      </article>
+    </template>
+    <script src="panel.js"></script>
+  </body>
+</html>

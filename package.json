@@ -10,8 +10,8 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "shortcut": "npm link",
-    "unshortcut": "npm unlink --global flymotion",
+    "shortcut": "node app/shortcut.js",
+    "unshortcut": "node app/shortcut.js --remove",
     "test": "node --test \"app/test/**/*.test.js\""
   },
   "dependencies": {

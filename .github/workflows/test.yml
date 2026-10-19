@@ -21,9 +21,6 @@ jobs:
   app:
     # The Electron app's bridge client and simulator driver; the tests do not need the Electron binary.
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: app
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

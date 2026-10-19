@@ -4,4 +4,4 @@ __pycache__/
 data/
 training/out/
 llama.cpp/
-app/node_modules/
+node_modules/

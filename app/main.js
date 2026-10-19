@@ -10,6 +10,7 @@ const { Bridge } = require('./bridge');
 
 const SIM_URL = process.env.FLYMOTION_SIM_URL || 'https://pollen-robotics-microduck-simulator.hf.space/?boot=1';
 const PANEL_WIDTH = 440;
+const ICON = path.join(__dirname, 'assets', 'icon.png');
 const DRIVER = fs.readFileSync(path.join(__dirname, 'sim', 'driver.js'), 'utf8');
 const SIM_METHODS = new Set(['play', 'stop', 'reset', 'status']);
 
@@ -93,6 +94,7 @@ function createWindow() {
     minHeight: 600,
     backgroundColor: '#08080c',
     title: 'FlyMotion · Microduck',
+    icon: ICON,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true },
   });
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
@@ -137,7 +139,10 @@ ipcMain.on('sim:emit', (event, payload) => {
   if (payload && typeof payload === 'object' && typeof payload.type === 'string') send('sim:event', payload);
 });
 
+app.setName('FlyMotion');
+
 app.whenReady().then(() => {
+  app.dock?.setIcon(ICON); // macOS: the Dock shows the FlyMotion duck, not Electron's logo
   startBridge();
   createWindow();
 });

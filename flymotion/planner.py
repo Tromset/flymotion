@@ -9,6 +9,8 @@ from .plan import PlanError, parse, schema
 from .prompt import system_prompt
 
 DEFAULT_MODEL = 'Tromset/flymotion0.1'
+# The first request loads the model from disk: 2 min 13 s for the 2B on a 4-core VM, longer on a Raspberry Pi.
+DEFAULT_TIMEOUT = 600
 
 
 def ollama_url():
@@ -21,7 +23,7 @@ def ollama_url():
 class Planner:
     """plan(request) -> (plan, info). `chat` can be replaced (tests, other servers): messages, schema -> text."""
 
-    def __init__(self, profile, model=DEFAULT_MODEL, chat=None, retries=1, timeout=120):
+    def __init__(self, profile, model=DEFAULT_MODEL, chat=None, retries=1, timeout=DEFAULT_TIMEOUT):
         self.profile, self.model, self.retries, self.timeout = profile, model, retries, timeout
         self.chat = chat or self._ollama
         self.history = []  # the last exchanges, so "do it again" or "the other way" make sense
@@ -41,6 +43,9 @@ class Planner:
             raise PlanError(f'Ollama returned HTTP {error.code}: {detail.strip()}') from None
         except urllib.error.URLError as error:
             raise PlanError(f'cannot reach Ollama at {ollama_url()} ({error.reason}); start it or set OLLAMA_HOST') from None
+        except TimeoutError:
+            raise PlanError(f'Ollama did not answer within {self.timeout:g} s: the first request loads {self.model} '
+                            'from disk; try again, it then stays loaded for 30 minutes') from None
 
     def plan(self, request):
         messages = [{'role': 'system', 'content': system_prompt(self.profile)}, *self.history[-6:],

@@ -211,6 +211,23 @@ class PlannerTest(unittest.TestCase):
         with self.assertRaises(PlanError):
             Planner(PROFILE, chat=lambda m, s: 'not json').plan('avance')
 
+    def test_a_silent_server_gives_a_plan_error_not_a_traceback(self):
+        server = socket.socket()
+        server.bind(('127.0.0.1', 0))
+        server.listen(1)  # accepts the connection, never answers
+        host = os.environ.get('OLLAMA_HOST')
+        os.environ['OLLAMA_HOST'] = f'127.0.0.1:{server.getsockname()[1]}'
+        try:
+            with self.assertRaises(PlanError) as caught:
+                Planner(PROFILE, timeout=0.3).plan('avance')
+            self.assertIn('did not answer within 0.3 s', str(caught.exception))
+        finally:
+            server.close()
+            if host is None:
+                del os.environ['OLLAMA_HOST']
+            else:
+                os.environ['OLLAMA_HOST'] = host
+
     def test_keeps_a_short_history(self):
         planner = Planner(PROFILE, chat=lambda m, s: '{"say": "ok", "steps": []}')
         for _ in range(5):

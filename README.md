@@ -1,6 +1,6 @@
 # FlyMotion 0.1
 
-FlyMotion turns what you say into motion for a small robot. "Avance d'un mètre, tourne à droite et frappe le ballon du pied gauche" becomes a plan, the plan becomes velocity commands, and [Microduck](https://github.com/pollen-robotics/microduck) walks. It runs locally with [Ollama](https://ollama.com), on a laptop or on a Raspberry Pi 5.
+FlyMotion turns what you say into motion for a small robot. "Move 3 feet ahead and shoot the ball with your right foot." becomes a plan, the plan becomes velocity commands, and [Microduck](https://github.com/pollen-robotics/microduck) walks. It runs locally with [Ollama](https://ollama.com), on a laptop or on a Raspberry Pi 5.
 
 ```sh
 ollama pull Tromset/flymotion0.1lite

@@ -10,6 +10,37 @@ python3 -m flymotion "avance d'un mètre, tourne à droite puis frappe le ballon
 #   sim: x=+1.00 m, y=+0.00 m, heading=-90 degrees, skills: kick_left
 ```
 
+## To launch the app :
+
+````sh
+cd ~
+````
+
+````sh
+git clone https://github.com/Tromset/flymotion
+````
+
+````sh
+cd flymotion
+````
+
+````sh
+npm install
+````
+
+````sh
+npm start
+````
+
+````sh
+npm run shortcut
+````
+
+````sh
+# From any directory
+flymotion
+````
+
 FlyMotion is built like [FlyCoder](https://github.com/Tromset/flycoder): an open Qwen base, the right settings, a short dedicated system prompt, a benchmark that measures the result, and a CI that publishes everything.
 
 ## The two models

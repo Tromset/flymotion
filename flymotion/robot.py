@@ -14,6 +14,8 @@ import subprocess
 import sys
 import time
 
+from .plan import gait
+
 
 class Transport:
     """Base: records nothing, used by the executor through send() and skill()."""
@@ -95,32 +97,51 @@ class LineTransport(Transport):
 
 class SimTransport(Transport):
     """A flat-ground kinematic simulation: integrates the velocity the robot really reaches (profile `achieved`).
-    Used by --transport sim, the benchmark and the tests. Time is virtual unless realtime=True."""
+    It walks like the profile's gait: nothing moves during the start-up from standing, and an axis commanded below
+    the gait threshold steps in place. That time is counted in `in_place`, so a plan that would only make the robot
+    shake on the spot never passes for a walk. Used by --transport sim, the benchmark and the tests.
+    Time is virtual unless realtime=True."""
 
     def __init__(self, profile, realtime=False):
-        self.achieved, self.realtime = profile['achieved'], realtime
-        self.x = self.y = self.heading = self.t = 0.0
+        self.achieved, self.realtime, self.gait = profile['achieved'], realtime, gait(profile)
+        self.x = self.y = self.heading = self.t = self.in_place = 0.0
         self.velocity = (0.0, 0.0, 0.0)
+        self.started = None  # when the robot last started from standing
         self.head, self.skills, self.log = {}, [], []
 
     def advance(self, seconds):
         steps = max(1, int(seconds / 0.01))
         dt = seconds / steps
-        vx, vy, vyaw = self.velocity
+        minimum = self.gait['min_speed']
+        commanded = dict(zip(('vx', 'vy', 'vyaw'), self.velocity))
+        walked = {axis: value if abs(value) >= minimum[axis] else 0.0 for axis, value in commanded.items()}
         for _ in range(steps):
+            if self.started is not None and self.t - self.started < self.gait['start_seconds'] - 1e-9:
+                vx = vy = vyaw = 0.0
+            else:
+                vx, vy, vyaw = walked['vx'], walked['vy'], walked['vyaw']
+                if any(commanded.values()) and not any(walked.values()):
+                    self.in_place += dt
             self.heading += vyaw * self.achieved['vyaw'] * dt / 2
             c, s = math.cos(self.heading), math.sin(self.heading)
             self.x += (vx * self.achieved['vx'] * c - vy * self.achieved['vy'] * s) * dt
             self.y += (vx * self.achieved['vx'] * s + vy * self.achieved['vy'] * c) * dt
             self.heading += vyaw * self.achieved['vyaw'] * dt / 2
-        self.t += seconds
+            self.t += dt
+
+    def _set(self, velocity):
+        if not any(velocity):
+            self.started = None
+        elif self.started is None:
+            self.started = self.t
+        self.velocity = velocity
 
     def send(self, method, params=None, request=False):
         self.log.append((round(self.t, 3), method, params))
         if method == 'robot.move':
-            self.velocity = (params['vx'], params['vy'], params['vyaw'])
+            self._set((params['vx'], params['vy'], params['vyaw']))
         elif method == 'robot.stop':
-            self.velocity = (0.0, 0.0, 0.0)
+            self._set((0.0, 0.0, 0.0))
         elif method == 'robot.head':
             self.head = dict(params)
 
@@ -129,7 +150,7 @@ class SimTransport(Transport):
 
     def state(self):
         return {'x': round(self.x, 3), 'y': round(self.y, 3), 'heading': round(math.degrees(self.heading), 1),
-                'head': self.head, 'skills': list(self.skills), 'seconds': round(self.t, 2)}
+                'head': self.head, 'skills': list(self.skills), 'seconds': round(self.t, 2), 'in_place': round(self.in_place, 2)}
 
 
 def connect(target, profile, skill_command=None):

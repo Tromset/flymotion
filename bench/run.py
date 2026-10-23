@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """FlyMotion benchmark: each request is planned by the model, compiled, played in the simulator, and the final
-position, heading, head and skills are checked. It scores what the robot would do, not the exact JSON.
+position, heading, head and skills are checked, and so is the gait: a plan that makes the robot shake on the spot
+instead of walking fails, whatever its final position. It scores what the robot would do, not the exact JSON.
 
-  python3 bench/run.py --model flymotion0.1lite [--out docs/bench/flymotion0.1lite.json] [--only 3,8]
+  python3 bench/run.py --model flymotion0.2lite [--robot microduck-sim] [--out docs/bench/flymotion0.2lite.json] [--only 3,8]
 """
 import argparse
 import json
@@ -41,6 +42,8 @@ def check(expect, plan, state, commands):
         value = state['head'].get({'yaw': 'head_yaw', 'pitch': 'head_pitch', 'roll': 'head_roll'}[joint], 0)
         if (sign == '+' and value <= 0.05) or (sign == '-' and value >= -0.05):
             failures.append(f'head {joint}={math.degrees(value):+.0f} degrees, expected {sign}')
+    if state.get('in_place', 0) > 0.2:
+        failures.append(f'stepped in place for {state["in_place"]:.1f} s instead of walking')
     if duration(commands) < expect.get('min_seconds', 0):
         failures.append(f'{duration(commands):.1f} s of motion, expected at least {expect["min_seconds"]}')
     return failures
@@ -64,7 +67,7 @@ def run_case(planner, profile, case):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', default='flymotion0.1')
+    parser.add_argument('--model', default='flymotion0.2')
     parser.add_argument('--robot', default='microduck')
     parser.add_argument('--out')
     parser.add_argument('--only', help='comma-separated case numbers, from 1')

@@ -6,9 +6,9 @@ import urllib.error
 import urllib.request
 
 from .plan import PlanError, parse, schema
-from .prompt import system_prompt
+from .prompt import language, say, system_prompt
 
-DEFAULT_MODEL = 'Tromset/flymotion0.1'
+DEFAULT_MODEL = 'Tromset/flymotion0.2'
 # The first request loads the model from disk: 2 min 13 s for the 2B on a 4-core VM, longer on a Raspberry Pi.
 DEFAULT_TIMEOUT = 600
 
@@ -21,7 +21,8 @@ def ollama_url():
 
 
 class Planner:
-    """plan(request) -> (plan, info). `chat` can be replaced (tests, other servers): messages, schema -> text."""
+    """plan(request) -> (plan, info). `chat` can be replaced (tests, other servers): messages, schema -> text.
+    The model writes the steps; the plan returned also carries "say", the sentence for the user, written by the bridge."""
 
     def __init__(self, profile, model=DEFAULT_MODEL, chat=None, retries=1, timeout=DEFAULT_TIMEOUT):
         self.profile, self.model, self.retries, self.timeout = profile, model, retries, timeout
@@ -63,4 +64,5 @@ class Planner:
                 messages += [{'role': 'assistant', 'content': text},
                              {'role': 'user', 'content': f'Invalid plan: {error}. Reply with the corrected JSON only.'}]
         self.history += [{'role': 'user', 'content': request}, {'role': 'assistant', 'content': json.dumps(plan, ensure_ascii=False)}]
+        plan = {'say': say(plan, language(request)), **plan}
         return plan, {'seconds': round(time.monotonic() - started, 2), 'attempts': attempt + 1}

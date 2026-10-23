@@ -4,6 +4,7 @@
   "notes": [
     "Velocity limits are the trained ranges of the Microduck walking policies (vx +-0.4 m/s, vy +-0.3 m/s, vyaw +-1 rad/s).",
     "achieved: measured speed / commanded speed for your walking policy. 1.0 until you calibrate it with `python -m flymotion calibrate`.",
+    "gait: below min_speed an axis only steps in place, start_seconds is the time to start walking from standing. 0 until you measure them on your robot.",
     "head_look: the head angles of \"look left\", \"look up\"... head_sign: flip a sign if the head turns the wrong way on your robot."
   ],
   "limits": {
@@ -18,6 +19,7 @@
   },
   "cruise": { "vx": 0.2, "vy": 0.15, "vyaw": 0.8 },
   "achieved": { "vx": 1.0, "vy": 1.0, "vyaw": 1.0 },
+  "gait": { "start_seconds": 0.0, "min_meters": 0.05, "min_speed": { "vx": 0.0, "vy": 0.0, "vyaw": 0.0 } },
   "head_look": { "yaw_deg": 30, "pitch_deg": 20 },
   "head_sign": { "yaw": 1, "pitch": 1, "roll": 1 },
   "skills": {

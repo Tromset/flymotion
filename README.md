@@ -29,8 +29,10 @@ npm install
 ````
 
 ````sh
-# Install the latest model, or update it (run it again after each new release)
-ollama pull Tromset/flymotion0.2lite      # or Tromset/flymotion0.2 on a computer with 8 GB
+# Install the latest model, or update it
+# Run it again after each new release
+ollama pull Tromset/flymotion0.2lite
+# Or Tromset/flymotion0.2 on a computer with 8 GB
 ````
 
 ````sh

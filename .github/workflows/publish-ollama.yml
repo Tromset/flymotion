@@ -1,22 +1,20 @@
 name: publish-ollama
-# Every change to main that touches a Modelfile or an Ollama page is published on ollama.com:
-# the changed models are rebuilt and pushed as Tromset/<name>, then the pages are updated from docs/ollama/.
-# Needs two repository secrets (Settings > Secrets and variables > Actions):
-#   OLLAMA_KEY      the private key ~/.ollama/id_ed25519 of a machine linked to the Tromset account (`ollama signin`)
-#   OLLAMA_API_KEY  an API key from https://ollama.com/settings/keys
+# Every change to main that touches a Modelfile is published on ollama.com: the changed models are rebuilt and
+# pushed as Tromset/<name>. The model pages are not updated here (ollama.com refuses API keys for that, HTTP 401):
+# paste docs/ollama/<model>.md with the page's Edit button.
+# Needs one repository secret (Settings > Secrets and variables > Actions):
+#   OLLAMA_KEY  the private key ~/.ollama/id_ed25519 of a machine linked to the Tromset account (`ollama signin`)
 on:
   push:
     branches: [main]
     paths:
       - 'Modelfile*'
-      - 'docs/ollama/**'
       - 'scripts/publish-ollama.sh'
-      - 'scripts/update-ollama-pages.sh'
       - '.github/workflows/publish-ollama.yml'
   workflow_dispatch:
     inputs:
       models:
-        description: 'Models to publish (space-separated names, "all", or "none" for pages only)'
+        description: 'Models to publish (space-separated names or "all")'
         default: all
 concurrency:
   group: publish-ollama
@@ -28,7 +26,6 @@ jobs:
     timeout-minutes: 60
     env:
       OLLAMA_KEY: ${{ secrets.OLLAMA_KEY }}
-      OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -61,7 +58,6 @@ jobs:
       - name: Check the secrets
         run: |
           [ -n "$OLLAMA_KEY" ] || { echo "::error::Add the OLLAMA_KEY secret (contents of ~/.ollama/id_ed25519 from a machine signed in to the Tromset account)."; exit 1; }
-          [ -n "$OLLAMA_API_KEY" ] || echo "::warning::OLLAMA_API_KEY is not set: the model pages will not be updated."
 
       - name: Start Ollama with the Tromset key
         if: steps.pick.outputs.models != 'none'
@@ -86,15 +82,6 @@ jobs:
           # MODELS is a space-separated list of names: split it on purpose.
           # shellcheck disable=SC2086
           if [ "$MODELS" = all ]; then sh scripts/publish-ollama.sh Tromset; else sh scripts/publish-ollama.sh Tromset $MODELS; fi
-
-      - name: Update the model pages
-        if: env.OLLAMA_API_KEY != ''
-        run: |
-          if sh scripts/update-ollama-pages.sh Tromset; then
-            echo "Model pages updated from docs/ollama/." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "::warning::Some ollama.com pages were not updated (see the log). Paste docs/ollama/<model>.md into the page by hand."
-          fi
 
       - name: Remove the key
         if: always()

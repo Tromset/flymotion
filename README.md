@@ -173,7 +173,7 @@ Results in `docs/bench/`. Planning times are on a 4-core server without a GPU, a
 
 ## Publishing
 
-- **Ollama**: every change to `main` that touches a Modelfile or a page in `docs/ollama/` is published by [publish-ollama](.github/workflows/publish-ollama.yml). Secrets: `OLLAMA_KEY` (the `~/.ollama/id_ed25519` of a machine signed in to the Tromset account) and `OLLAMA_API_KEY` (https://ollama.com/settings/keys). By hand: `sh scripts/publish-ollama.sh Tromset`.
+- **Ollama**: every change to `main` that touches a Modelfile is published by [publish-ollama](.github/workflows/publish-ollama.yml). Secret: `OLLAMA_KEY` (the `~/.ollama/id_ed25519` of a machine signed in to the Tromset account). By hand: `sh scripts/publish-ollama.sh Tromset`. The model pages are not published by the workflow: paste `docs/ollama/<model>.md` with the Edit button of each page on ollama.com.
 - **Hugging Face**: [publish-hf](.github/workflows/publish-hf.yml) publishes the dataset [`Tromset/flymotion-commands`](https://huggingface.co/datasets/Tromset/flymotion-commands) and the model repository [`Tromset/flymotion`](https://huggingface.co/Tromset/flymotion) (Modelfiles, system prompt, JSON schema, robot profiles, benchmark). Secret: `HF_TOKEN`, a write token from https://huggingface.co/settings/tokens. By hand: `HF_TOKEN=... python3 scripts/publish_hf.py`.
 
 ## Fine-tuning (path to 0.3)

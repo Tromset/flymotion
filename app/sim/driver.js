@@ -76,7 +76,8 @@
       source.active = false;
     }
 
-    function wait(seconds, token) {
+    // Wall-clock pause, for polling the simulator's state.
+    function pause(seconds, token) {
       return new Promise((resolve) => {
         if (run?.token !== token) return resolve();
         run.wake = resolve;
@@ -84,10 +85,34 @@
       });
     }
 
+    const simTime = () => (typeof rl.data?.time === 'number' ? rl.data.time : null);
+
+    // Command durations are simulated seconds: the walker only covers the distance in simulated time, and the
+    // physics runs slower than the wall clock on a machine without a GPU or in a throttled view. Timed on the
+    // wall clock there, a walk ended before the duck had finished starting, and it never moved.
+    async function wait(seconds, token) {
+      const start = simTime();
+      if (start === null) return pause(seconds, token);
+      while (run?.token === token && simTime() - start < seconds - 1e-6) await pause(0.02, token);
+    }
+
     // After a reset the simulator replays its respawn and ignores the input for a few seconds.
     async function unlocked(token) {
       for (let tries = 0; (rl.inputLocked || rl.respawnActive) && tries < 150; tries++) {
-        await wait(0.1, token);
+        await pause(0.1, token);
+        if (run?.token !== token) return;
+      }
+    }
+
+    // The simulator only feeds the twist to the walker in walk mode: sitting (sit_toggle), in head mode or
+    // getting up after a fall, the duck ignores every move. Stand it up first, the way the gamepad does.
+    async function walkable(token) {
+      if (rl.headMode && rl.toggleHeadMode) rl.toggleHeadMode();
+      if (rl.mode === 'sitstand') source.onAction('walk', {});
+      const start = simTime();
+      for (let tries = 0; (rl.mode !== 'walk' || rl.recovery) && tries < 600; tries++) {
+        if (start !== null && simTime() - start > 10) break;
+        await pause(0.05, token);
         if (run?.token !== token) return;
       }
     }
@@ -126,6 +151,10 @@
         const command = commands[index];
         emit({ type: 'command', id, index });
         if (command.kind === 'move') {
+          if (command.vx || command.vy || command.vyaw) {
+            await walkable(token);
+            if (run?.token !== token) break;
+          }
           const vx = clamp(command.vx, sim.vxBackward, sim.vxForward);
           const vyaw = clamp(command.vyaw, -sim.vyaw, sim.vyaw);
           if (vx !== command.vx || vyaw !== command.vyaw) limited.push(index);

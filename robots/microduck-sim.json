@@ -7,10 +7,12 @@
     "Its walker is commanded up to vx 0.25 m/s forward and 1 rad/s. Below about 0.22 m/s it does not start walking, so cruise is the maximum.",
     "achieved: steady speeds measured in the simulator (forward 0.11 m/s at 0.25, in-place left turn 0.26 rad/s at 1, sideways 0.06 m/s at 0.3). Walking starts after about 1.5 s.",
     "Backward walking and in-place right turns barely respond in the simulator: the app shows the gap between the plan and the physics.",
+    "gait: the simulator caps backward walking at 0.2 m/s (vx_backward), under the 0.22 m/s the walker needs to start, so it only shakes on the spot. The bridge turns around and walks forward instead.",
     "Never drive the real robot with this profile: the app always runs real robots with their own profile (microduck)."
   ],
   "limits": {
     "vx": 0.25,
+    "vx_backward": 0.2,
     "vy": 0.3,
     "vyaw": 1.0,
     "head_deg": 30,
@@ -21,6 +23,7 @@
   },
   "cruise": { "vx": 0.25, "vy": 0.3, "vyaw": 1.0 },
   "achieved": { "vx": 0.44, "vy": 0.19, "vyaw": 0.26 },
+  "gait": { "start_seconds": 1.5, "min_meters": 0.05, "min_speed": { "vx": 0.22, "vy": 0.0, "vyaw": 0.0 } },
   "head_look": { "yaw_deg": 30, "pitch_deg": 20 },
   "head_sign": { "yaw": 1, "pitch": 1, "roll": 1 },
   "skills": {

@@ -49,14 +49,12 @@ const poseText = (pose) => `x ${fixed(pose.x)} m · y ${fixed(pose.y)} m · cap 
 
 function stepText(step) {
   switch (step.action) {
-    case 'walk': return `marche ${step.direction} ${step.meters} m`;
-    case 'turn': return `tourne ${step.direction} ${step.degrees ?? 90}°`;
-    case 'circle': return `cercle ${step.direction} r=${step.meters} m`;
-    case 'head': return `tête ${step.look}`;
-    case 'skill': return step.skill;
-    case 'wait': return `attend ${step.seconds} s`;
-    case 'move': return `move vx=${step.vx ?? 0} vy=${step.vy ?? 0} vyaw=${step.vyaw ?? 0} ${step.seconds} s`;
-    default: return step.action;
+    case 'walk': return `marche ${step.direction} ${step.value} m`;
+    case 'turn': return `tourne ${step.direction} ${step.value ?? 90}°`;
+    case 'circle': return `cercle ${step.direction} r=${step.value} m`;
+    case 'look': return `regarde ${step.direction}`;
+    case 'wait': return `attend ${step.value} s`;
+    default: return step.action; // stop, or a skill
   }
 }
 
@@ -123,7 +121,8 @@ function addCard(result) {
 
   const entry = { card, result };
   if (plan.steps.length) {
-    card.querySelector('.ideal').textContent = poseText(result.sim);
+    // The bridge's simulator walks like the robot's gait: time spent shaking on the spot is not a walk.
+    card.querySelector('.ideal').textContent = poseText(result.sim) + (result.sim.in_place > 0.2 ? ` · piétine ${result.sim.in_place.toFixed(1)} s` : '');
     card.querySelector('.replay').addEventListener('click', () => playInSim(entry));
     card.querySelector('.robot').addEventListener('click', () => runOnRobot(entry));
   } else {
@@ -281,7 +280,7 @@ function stopAll() {
   return api.stopAll();
 }
 
-// Ollama lists "name:tag"; "Tromset/flymotion0.1" is "Tromset/flymotion0.1:latest".
+// Ollama lists "name:tag"; "Tromset/flymotion0.2" is "Tromset/flymotion0.2:latest".
 const sameModel = (a, b) => a === b || `${a}:latest` === b || a === `${b}:latest`;
 
 async function loadModels() {
@@ -290,7 +289,7 @@ async function loadModels() {
   let models = [];
   try {
     models = (await api.request({ type: 'models' })).models;
-    pill('ollama', models.length ? 'ok' : 'bad', models.length ? `${models.length} modèles` : 'aucun modèle : ollama pull Tromset/flymotion0.1lite');
+    pill('ollama', models.length ? 'ok' : 'bad', models.length ? `${models.length} modèles` : 'aucun modèle : ollama pull Tromset/flymotion0.2lite');
   } catch (error) {
     pill('ollama', 'bad', error.message);
   }
@@ -367,7 +366,7 @@ $('#request').addEventListener('keydown', (event) => {
 });
 $('#json-mode').addEventListener('change', () => {
   $('#request').placeholder = $('#json-mode').checked
-    ? '{"say": "Je fais un carré.", "repeat": 4, "steps": [{"action": "walk", "direction": "forward", "meters": 0.5}, {"action": "turn", "direction": "left", "degrees": 90}]}'
+    ? '{"repeat": 4, "steps": [{"action": "walk", "direction": "forward", "value": 0.5}, {"action": "turn", "direction": "left", "value": 90}]}'
     : "Avance d'un mètre, tourne à droite et frappe le ballon du pied gauche";
 });
 $('#model').addEventListener('change', () => settings.write('model', $('#model').value));

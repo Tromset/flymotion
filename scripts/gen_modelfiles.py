@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT))
 from flymotion.plan import load_profile  # noqa: E402
 from flymotion.prompt import system_prompt  # noqa: E402
 
-VERSION = '0.1'
+VERSION = '0.2'
 # file, published name, Ollama base, base description, what it runs on
 VARIANTS = [
     ('Modelfile', f'flymotion{VERSION}', 'qwen3.5:4b', 'Qwen3.5 4B', 'any computer with 8 GB of memory'),
@@ -27,8 +27,11 @@ FROM {base}
 REQUIRES 0.30.0
 
 # A plan is short: a small context keeps memory low and the first token fast.
-PARAMETER num_ctx 4096
-PARAMETER num_predict 768
+PARAMETER num_ctx 2048
+PARAMETER num_predict 384
+# Qwen3.5 is a hybrid model: Ollama can only reuse the cached system prompt up to one batch before the end of the
+# last prompt. Small batches keep almost all of it: on a 4-core CPU the 2B reads the request in 1 s instead of 11 s.
+PARAMETER num_batch 32
 
 # Low temperature: the same request gives the same motion.
 PARAMETER temperature 0.2

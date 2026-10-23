@@ -16,69 +16,86 @@ sys.path.insert(0, str(ROOT / 'training'))
 
 from flymotion.plan import PlanError, compile_plan, duration, load_profile, parse, schema, validate  # noqa: E402
 from flymotion.planner import Planner  # noqa: E402
-from flymotion.prompt import EXAMPLES, system_prompt  # noqa: E402
+from flymotion.prompt import EXAMPLES, language, say, system_prompt  # noqa: E402
 from flymotion.robot import LineTransport, SimTransport, execute  # noqa: E402
 from flymotion.serve import Server  # noqa: E402
 import build_dataset  # noqa: E402
 import run as bench  # noqa: E402
 
 PROFILE = load_profile('microduck')
+SIM = load_profile('microduck-sim')
 
 
-def simulate(steps):
-    commands, warnings = compile_plan({'say': '', 'steps': steps}, PROFILE)
-    sim = SimTransport(PROFILE)
-    execute(commands, sim, PROFILE)
+def simulate(steps, profile=PROFILE, repeat=1):
+    commands, warnings = compile_plan({'repeat': repeat, 'steps': steps}, profile)
+    sim = SimTransport(profile)
+    execute(commands, sim, profile)
     return sim, commands, warnings
 
 
 class PlanTest(unittest.TestCase):
-    def test_schema_lists_the_robot_skills(self):
-        step = schema(PROFILE)['properties']['steps']['items']
-        self.assertEqual(step['properties']['skill']['enum'], list(PROFILE['skills']))
-        self.assertEqual(step['required'], ['action'])
-        # The model decides "repeat" (shapes) before it writes the steps.
-        self.assertEqual(list(schema(PROFILE)['properties']), ['say', 'repeat', 'steps'])
-        self.assertEqual(schema(PROFILE)['required'], ['say', 'repeat', 'steps'])
+    def test_schema_is_actions_values_and_order(self):
+        plan = schema(PROFILE)
+        skill, motion = plan['properties']['steps']['items']['anyOf']
+        self.assertEqual(list(motion['properties']), ['action', 'direction', 'value'])
+        self.assertEqual(motion['properties']['action']['enum'], ['walk', 'turn', 'circle', 'look', 'wait', 'stop'])
+        self.assertEqual(skill['properties']['action']['enum'], list(PROFILE['skills']))
+        self.assertFalse(skill['additionalProperties'])  # a skill is its name alone
+        # One safety decision, then the steps in the request's order, then how many times to play them. Nothing else.
+        self.assertEqual(list(plan['properties']), ['safe', 'steps', 'repeat'])
+        self.assertEqual(plan['required'], ['safe', 'steps', 'repeat'])
+
+    def test_an_unsafe_plan_drops_its_steps(self):
+        plan = parse('{"safe": false, "steps": [{"action": "kick_left"}, {"action": "fly"}], "repeat": 1}', PROFILE)
+        self.assertEqual(plan['steps'], [])
+        self.assertEqual(compile_plan({'safe': False, 'steps': [{'action': 'kick_left'}]}, PROFILE)[0], [{'kind': 'stop'}])
+        self.assertEqual(say({'safe': False, 'steps': [{'action': 'kick_left'}]}, 'en'), 'I cannot do that.')
+        self.assertIn('true or false', validate({'safe': 'no', 'steps': []}, PROFILE)[0])
 
     def test_validate_names_each_problem(self):
-        self.assertEqual(validate({'say': 'ok', 'steps': [{'action': 'walk', 'direction': 'left', 'meters': 1}]}, PROFILE), [])
-        errors = validate({'say': 'x', 'steps': [{'action': 'jump'}, {'action': 'walk', 'direction': 'forward'}, {'action': 'skill', 'skill': 'dance'},
-                                                 {'action': 'turn', 'direction': 'left', 'degrees': '90'}, {'action': 'wait', 'seconds': 0},
-                                                 {'action': 'turn', 'direction': 'forward'}, {'action': 'head'}]}, PROFILE)
-        self.assertEqual(len(errors), 7, errors)
+        self.assertEqual(validate({'steps': [{'action': 'walk', 'direction': 'left', 'value': 1}]}, PROFILE), [])
+        errors = validate({'steps': [{'action': 'jump'}, {'action': 'walk', 'direction': 'forward'}, {'action': 'dance'},
+                                     {'action': 'turn', 'direction': 'left', 'value': '90'}, {'action': 'wait', 'value': 0},
+                                     {'action': 'turn', 'direction': 'forward'}, {'action': 'look'},
+                                     {'action': 'walk', 'direction': 'forward', 'value': 0.01}]}, PROFILE)
+        self.assertEqual(len(errors), 8, errors)
         self.assertIn('unknown action', errors[0])
-        self.assertIn('needs "meters"', errors[1])
-        self.assertIn('unknown skill', errors[2])
+        self.assertIn('needs "value"', errors[1])
+        self.assertIn('unknown action', errors[2])
         self.assertIn('must be a number', errors[3])
         self.assertIn('positive', errors[4])
         self.assertIn('left or right', errors[5])
-        self.assertIn('needs "look"', errors[6])
+        self.assertIn('needs "direction"', errors[6])
+        self.assertIn('walk at least', errors[7])  # a shuffle is not a step
         self.assertTrue(validate([], PROFILE))
-        self.assertTrue(validate({'say': 'x', 'steps': [], 'repeat': 50}, PROFILE))
-        self.assertTrue(validate({'say': 'x', 'steps': [], 'repeat': 1.5}, PROFILE))
-        self.assertTrue(validate({'say': 'x', 'steps': [{'action': 'move', 'seconds': float('nan')}]}, PROFILE))
+        self.assertTrue(validate({'steps': [], 'repeat': 50}, PROFILE))
+        self.assertTrue(validate({'steps': [], 'repeat': 1.5}, PROFILE))
+        self.assertTrue(validate({'steps': [{'action': 'wait', 'value': float('nan')}]}, PROFILE))
+        # Raw velocities are not an action any more: the model cannot make the robot shake on the spot.
+        self.assertIn('unknown action', validate({'steps': [{'action': 'move', 'vx': 0.01, 'seconds': 5}]}, PROFILE)[0])
 
     def test_parse_rejects_invalid_json(self):
         with self.assertRaises(PlanError):
-            parse('{"say": "x", "steps": [', PROFILE)
+            parse('{"steps": [', PROFILE)
 
     def test_walk_turn_and_strafe_reach_the_asked_pose(self):
-        sim, _, warnings = simulate([{'action': 'walk', 'direction': 'forward', 'meters': 1}, {'action': 'turn', 'direction': 'right'},
-                                     {'action': 'walk', 'direction': 'forward', 'meters': 0.5}, {'action': 'walk', 'direction': 'left', 'meters': 0.2},
-                                     {'action': 'walk', 'direction': 'backward', 'meters': -0.1}])
+        sim, _, warnings = simulate([{'action': 'walk', 'direction': 'forward', 'value': 1}, {'action': 'turn', 'direction': 'right'},
+                                     {'action': 'walk', 'direction': 'forward', 'value': 0.5}, {'action': 'walk', 'direction': 'left', 'value': 0.2},
+                                     {'action': 'walk', 'direction': 'backward', 'value': -0.1}])
         state = sim.state()
         self.assertEqual(warnings, [])
         self.assertAlmostEqual(state['x'], 1.2, delta=0.02)
-        self.assertAlmostEqual(state['y'], -0.4, delta=0.02)  # the sign of meters is ignored: direction wins
+        self.assertAlmostEqual(state['y'], -0.4, delta=0.02)  # the sign of the value is ignored: direction wins
         self.assertAlmostEqual(state['heading'], -90, delta=1)
+        self.assertEqual(state['in_place'], 0)
+
+    def test_skills_are_actions(self):
+        sim, commands, _ = simulate([{'action': 'kick_left'}, {'action': 'sit_toggle'}])
+        self.assertEqual([c['kind'] for c in commands], ['skill', 'skill', 'stop'])
+        self.assertEqual(sim.skills, ['kick_left', 'sit_toggle'])
 
     def test_a_repeated_side_and_turn_draws_a_closed_square(self):
-        plan = {'say': '', 'repeat': 4, 'steps': [{'action': 'walk', 'direction': 'forward', 'meters': 0.5},
-                                                  {'action': 'turn', 'direction': 'right', 'degrees': 90}]}
-        commands, _ = compile_plan(plan, PROFILE)
-        sim = SimTransport(PROFILE)
-        execute(commands, sim, PROFILE)
+        sim, commands, _ = simulate([{'action': 'walk', 'direction': 'forward', 'value': 0.5}, {'action': 'turn', 'direction': 'right', 'value': 90}], repeat=4)
         self.assertEqual(len(commands), 9)
         self.assertAlmostEqual(sim.state()['x'], 0, delta=0.02)
         self.assertAlmostEqual(sim.state()['y'], 0, delta=0.02)
@@ -86,39 +103,34 @@ class PlanTest(unittest.TestCase):
     def test_a_circle_comes_back_to_the_start_even_on_a_weak_turner(self):
         for achieved in ({'vx': 1.0, 'vy': 1.0, 'vyaw': 1.0}, {'vx': 0.8, 'vy': 1.0, 'vyaw': 0.6}):
             profile = dict(PROFILE, achieved=achieved)
-            commands, _ = compile_plan({'say': '', 'steps': [{'action': 'circle', 'direction': 'right', 'meters': 0.5}]}, profile)
-            sim = SimTransport(profile)
-            execute(commands, sim, profile)
+            sim, commands, _ = simulate([{'action': 'circle', 'direction': 'right', 'value': 0.5}], profile)
             self.assertAlmostEqual(math.hypot(sim.state()['x'], sim.state()['y']), 0, delta=0.03)
+            self.assertAlmostEqual(sim.state()['heading'] % 360, 0, delta=2)
             self.assertLess(commands[0]['vyaw'], 0)
 
-    def test_head_looks_map_to_angles(self):
-        commands, _ = compile_plan({'say': '', 'steps': [{'action': 'head', 'look': 'down-right'}, {'action': 'head', 'look': 'up', 'degrees': 90}]}, PROFILE)
+    def test_looks_map_to_head_angles(self):
+        commands, _ = compile_plan({'steps': [{'action': 'look', 'direction': 'down-right'}, {'action': 'look', 'direction': 'up', 'value': 90}]}, PROFILE)
         self.assertEqual(commands[0], {'kind': 'head', 'yaw': round(math.radians(-30), 4), 'pitch': round(math.radians(-20), 4), 'roll': 0.0})
         self.assertEqual((commands[1]['yaw'], commands[1]['pitch']), (0, round(math.radians(30), 4)))
 
     def test_limits_are_enforced_and_reported(self):
-        _, commands, warnings = simulate([{'action': 'move', 'vx': 5, 'vy': -2, 'vyaw': 9, 'seconds': 100},
-                                          {'action': 'head', 'look': 'left', 'degrees': 90}, {'action': 'walk', 'direction': 'forward', 'meters': 50}])
-        move = commands[0]
-        self.assertEqual((move['vx'], move['vy'], move['vyaw']), (0.4, -0.3, 1.0))
-        self.assertEqual(move['seconds'], PROFILE['limits']['step_seconds'])
+        _, commands, warnings = simulate([{'action': 'wait', 'value': 100}, {'action': 'look', 'direction': 'left', 'value': 90},
+                                          {'action': 'walk', 'direction': 'forward', 'value': 50}])
+        self.assertEqual(commands[0]['seconds'], PROFILE['limits']['step_seconds'])
         self.assertAlmostEqual(commands[1]['yaw'], math.radians(30), places=3)
         self.assertLessEqual(duration(commands), PROFILE['limits']['plan_seconds'])
         self.assertEqual(commands[-1], {'kind': 'stop'})
-        self.assertGreaterEqual(len(warnings), 5)
+        self.assertEqual(len(warnings), 2, warnings)  # the wait and the walk
 
     def test_slow_robots_walk_longer(self):
         slow = dict(PROFILE, achieved={'vx': 0.5, 'vy': 1.0, 'vyaw': 0.29})
-        commands, _ = compile_plan({'say': '', 'steps': [{'action': 'walk', 'direction': 'forward', 'meters': 1}, {'action': 'turn', 'direction': 'left'}]}, slow)
+        sim, commands, _ = simulate([{'action': 'walk', 'direction': 'forward', 'value': 1}, {'action': 'turn', 'direction': 'left'}], slow)
         self.assertAlmostEqual(commands[0]['seconds'], 10, places=2)
-        sim = SimTransport(slow)
-        execute(commands, sim, slow)
         self.assertAlmostEqual(sim.state()['x'], 1, delta=0.02)
         self.assertAlmostEqual(sim.state()['heading'], 90, delta=1)
 
     def test_an_empty_plan_only_stops(self):
-        self.assertEqual(compile_plan({'say': 'no', 'steps': []}, PROFILE)[0], [{'kind': 'stop'}])
+        self.assertEqual(compile_plan({'steps': []}, PROFILE)[0], [{'kind': 'stop'}])
 
     def test_prompt_examples_are_valid_plans(self):
         for request, plan in EXAMPLES:
@@ -132,15 +144,75 @@ class PlanTest(unittest.TestCase):
             load_profile('r2d2')
 
 
+class GaitTest(unittest.TestCase):
+    """The robot must walk for real: a plan that only makes it shake on the spot never passes for a walk."""
+
+    def test_commands_below_the_gait_threshold_step_in_place(self):
+        sim = SimTransport(SIM)
+        execute([{'kind': 'move', 'vx': 0.1, 'vy': 0.0, 'vyaw': 0.0, 'seconds': 5}, {'kind': 'stop'}], sim, SIM)
+        self.assertEqual(sim.state()['x'], 0)
+        self.assertGreater(sim.state()['in_place'], 3)
+        self.assertTrue(any('stepped in place' in f for f in bench.check({'x': 0}, {'steps': [{}]}, sim.state(), [])))
+
+    def test_the_simulator_cannot_walk_backward_so_the_duck_turns_around(self):
+        sim, commands, warnings = simulate([{'action': 'walk', 'direction': 'backward', 'value': 0.5}], SIM)
+        self.assertIn('cannot walk backward', warnings[0])
+        self.assertTrue(all(c['vx'] >= SIM['gait']['min_speed']['vx'] for c in commands if c['kind'] == 'move' and c['vx']))
+        state = sim.state()
+        self.assertAlmostEqual(state['x'], -0.5, delta=0.02)
+        self.assertAlmostEqual(bench.angle_gap(state['heading'], 0), 0, delta=1)
+        self.assertEqual(state['in_place'], 0)
+
+    def test_every_start_from_standing_includes_the_start_up(self):
+        sim, commands, _ = simulate([{'action': 'walk', 'direction': 'forward', 'value': 0.5}, {'action': 'turn', 'direction': 'left'},
+                                     {'action': 'wait', 'value': 1}, {'action': 'walk', 'direction': 'forward', 'value': 0.5}], SIM)
+        start = SIM['gait']['start_seconds']
+        self.assertAlmostEqual(commands[0]['seconds'], 0.5 / (0.25 * 0.44) + start, places=2)
+        self.assertAlmostEqual(commands[1]['seconds'], math.radians(90) / 0.26, places=2)  # already walking
+        self.assertAlmostEqual(commands[3]['seconds'], 0.5 / (0.25 * 0.44) + start, places=2)  # after the wait
+        self.assertAlmostEqual(sim.state()['x'], 0.5, delta=0.02)
+        self.assertAlmostEqual(sim.state()['y'], 0.5, delta=0.02)
+
+    def test_a_tight_circle_widens_to_stay_above_the_threshold(self):
+        sim, commands, warnings = simulate([{'action': 'circle', 'direction': 'left', 'value': 0.2}], SIM)
+        self.assertGreaterEqual(commands[0]['vx'], SIM['gait']['min_speed']['vx'])
+        self.assertIn('widened', warnings[0])
+        self.assertAlmostEqual(math.hypot(sim.state()['x'], sim.state()['y']), 0, delta=0.03)
+        self.assertEqual(sim.state()['in_place'], 0)
+
+    def test_every_profile_walks_every_prompt_example_for_real(self):
+        for path in sorted((ROOT / 'robots').glob('*.json')):
+            profile = load_profile(path.stem)
+            for request, plan in EXAMPLES:
+                sim, _, _ = simulate(plan['steps'], profile, plan.get('repeat', 1))
+                self.assertEqual(sim.state()['in_place'], 0, (path.stem, request))
+
+
+class SayTest(unittest.TestCase):
+    def test_the_bridge_writes_the_sentence_in_the_user_language(self):
+        plan = {'repeat': 4, 'steps': [{'action': 'walk', 'direction': 'forward', 'value': 0.5}, {'action': 'turn', 'direction': 'right'}]}
+        self.assertEqual(say(plan, 'fr'), "J'avance de 50 cm, puis je tourne à droite, 4 fois.")
+        self.assertEqual(say(plan, 'en'), 'Walking forward 50 cm, then turning right, 4 times.')
+        self.assertEqual(say({'steps': [{'action': 'look', 'direction': 'up-left'}, {'action': 'kick_left'}]}, 'en'),
+                         'Looking up and left, then running kick_left.')
+        self.assertEqual(say({'steps': []}, 'fr'), 'Je ne peux pas faire ça.')
+
+    def test_language(self):
+        self.assertEqual(language('Avance de 50 cm.'), 'fr')
+        self.assertEqual(language('Fais demi-tour'), 'fr')
+        self.assertEqual(language('Walk forward two meters.'), 'en')
+        self.assertEqual(language('Kick the cat.'), 'en')
+
+
 class ExecuteTest(unittest.TestCase):
     def test_move_is_resent_for_the_deadman_and_ends_with_stop(self):
-        sim, _, _ = simulate([{'action': 'walk', 'direction': 'forward', 'meters': 0.2}])
+        sim, _, _ = simulate([{'action': 'walk', 'direction': 'forward', 'value': 0.2}])
         moves = [entry for entry in sim.log if entry[1] == 'robot.move']
         self.assertEqual(len(moves), 10)  # 1 s at 10 Hz
         self.assertEqual(sim.log[-1][1], 'robot.stop')
 
     def test_skills_stop_first_then_run(self):
-        sim, _, _ = simulate([{'action': 'walk', 'direction': 'forward', 'meters': 0.2}, {'action': 'skill', 'skill': 'kick_left'}])
+        sim, _, _ = simulate([{'action': 'walk', 'direction': 'forward', 'value': 0.2}, {'action': 'kick_left'}])
         self.assertEqual(sim.skills, ['kick_left'])
         self.assertAlmostEqual(sim.state()['seconds'], 1 + PROFILE['skill_seconds'])
 
@@ -179,22 +251,22 @@ class ExecuteTest(unittest.TestCase):
         thread = threading.Thread(target=serve, daemon=True)
         thread.start()
         transport = LineTransport(f'unix:{path}')
-        commands, _ = compile_plan({'say': '', 'steps': [{'action': 'head', 'look': 'left', 'degrees': 10},
-                                                         {'action': 'walk', 'direction': 'forward', 'meters': 0.02}]}, PROFILE)
+        commands, _ = compile_plan({'steps': [{'action': 'look', 'direction': 'left', 'value': 10},
+                                              {'action': 'walk', 'direction': 'forward', 'value': 0.05}]}, PROFILE)
         execute(commands, transport, PROFILE, sleep=lambda s: None)
         transport.close()
         thread.join(2)
         server.close()
-        self.assertEqual([m['method'] for m in received], ['robot.head', 'robot.move', 'robot.stop'])
+        self.assertEqual([m['method'] for m in received], ['robot.head', 'robot.move', 'robot.move', 'robot.move', 'robot.stop'])  # 0.25 s at 10 Hz
         self.assertEqual(received[0]['params']['head_yaw'], round(math.radians(10), 4))
         self.assertEqual(received[1]['params'], {'vx': 0.2, 'vy': 0.0, 'vyaw': 0.0})
-        self.assertEqual(received[2], {'jsonrpc': '2.0', 'method': 'robot.stop', 'id': 1})
+        self.assertEqual(received[-1], {'jsonrpc': '2.0', 'method': 'robot.stop', 'id': 1})
 
 
 class PlannerTest(unittest.TestCase):
     def test_one_correction_round_then_success(self):
-        replies = iter(['{"say": "ok", "steps": [{"action": "walk", "direction": "forward"}]}',
-                        '{"say": "ok", "steps": [{"action": "walk", "direction": "forward", "meters": 1}]}'])
+        replies = iter(['{"safe": true, "steps": [{"action": "walk", "direction": "forward"}], "repeat": 1}',
+                        '{"safe": true, "steps": [{"action": "walk", "direction": "forward", "value": 1}], "repeat": 1}'])
         seen = []
 
         def chat(messages, format_schema):
@@ -202,9 +274,9 @@ class PlannerTest(unittest.TestCase):
             return next(replies)
 
         plan, info = Planner(PROFILE, chat=chat).plan('avance')
-        self.assertEqual(plan['steps'], [{'action': 'walk', 'direction': 'forward', 'meters': 1}])
+        self.assertEqual(plan, {'say': "J'avance de 1 m.", 'safe': True, 'steps': [{'action': 'walk', 'direction': 'forward', 'value': 1}], 'repeat': 1})
         self.assertEqual(info['attempts'], 2)
-        self.assertIn('needs "meters"', seen[1][-1]['content'])
+        self.assertIn('needs "value"', seen[1][-1]['content'])
         self.assertEqual(seen[0][0]['content'], system_prompt(PROFILE))
 
     def test_gives_up_after_the_retry(self):
@@ -229,10 +301,11 @@ class PlannerTest(unittest.TestCase):
                 os.environ['OLLAMA_HOST'] = host
 
     def test_keeps_a_short_history(self):
-        planner = Planner(PROFILE, chat=lambda m, s: '{"say": "ok", "steps": []}')
+        planner = Planner(PROFILE, chat=lambda m, s: '{"safe": false, "steps": [], "repeat": 1}')
         for _ in range(5):
             planner.plan('hello')
         self.assertEqual(len(planner.history), 10)
+        self.assertNotIn('say', planner.history[-1]['content'])  # the model only ever sees plans in its own format
 
 
 def robotd(path, received):
@@ -256,7 +329,7 @@ def robotd(path, received):
 
 
 class ServeTest(unittest.TestCase):
-    PLAN = {'say': 'ok', 'steps': [{'action': 'walk', 'direction': 'forward', 'meters': 1}, {'action': 'turn', 'direction': 'left'}]}
+    PLAN = {'repeat': 1, 'steps': [{'action': 'walk', 'direction': 'forward', 'value': 1}, {'action': 'turn', 'direction': 'left'}]}
 
     def server(self):
         written = []
@@ -266,13 +339,14 @@ class ServeTest(unittest.TestCase):
     def test_plans_compile_and_report_errors(self):
         server, written = self.server()
         server.answer({'id': 1, 'type': 'plan', 'request': 'avance d un mètre et tourne à gauche'})
-        server.answer({'id': 2, 'type': 'compile', 'plan': {'say': '', 'steps': [{'action': 'fly'}]}})
+        server.answer({'id': 2, 'type': 'compile', 'plan': {'steps': [{'action': 'fly'}]}})
         server.answer({'id': 3, 'type': 'dance'})
         plan, invalid, unknown = written
         self.assertTrue(plan['ok'])
         self.assertEqual(plan['commands'][-1], {'kind': 'stop'})
         self.assertAlmostEqual(plan['sim']['x'], 1, delta=0.02)
         self.assertAlmostEqual(plan['sim']['heading'], 90, delta=1)
+        self.assertEqual(plan['plan']['say'], "J'avance de 1 m, puis je tourne à gauche.")
         self.assertEqual((invalid['id'], invalid['ok']), (2, False))
         self.assertIn('unknown action', invalid['error'])
         self.assertFalse(unknown['ok'])
@@ -330,6 +404,7 @@ class ServeTest(unittest.TestCase):
             profile = load_profile(path.stem)
             self.assertEqual(profile['name'], path.stem)
             for request, plan in EXAMPLES:
+                plan = {'repeat': plan.get('repeat', 1), 'steps': plan['steps']}
                 self.assertEqual(validate(plan, profile), [], (path.stem, request))
                 commands, _ = compile_plan(plan, profile)
                 self.assertLessEqual(duration(commands), profile['limits']['plan_seconds'])
@@ -337,12 +412,12 @@ class ServeTest(unittest.TestCase):
 
 class BenchTest(unittest.TestCase):
     def test_check_scores_outcomes(self):
-        plan = {'say': '', 'steps': [{'action': 'walk', 'direction': 'forward', 'meters': 1}, {'action': 'turn', 'direction': 'right'}]}
+        plan = {'steps': [{'action': 'walk', 'direction': 'forward', 'value': 1}, {'action': 'turn', 'direction': 'right'}]}
         sim, commands, _ = simulate(plan['steps'])
         self.assertEqual(bench.check({'x': 1, 'y': 0, 'heading': -90}, plan, sim.state(), commands), [])
         self.assertEqual(len(bench.check({'x': 1, 'heading': 90}, plan, sim.state(), commands)), 1)
         self.assertEqual(len(bench.check({'refuse': True}, plan, sim.state(), commands)), 1)
-        self.assertEqual(bench.check({'refuse': True}, {'say': '', 'steps': []}, sim.state(), commands), [])
+        self.assertEqual(bench.check({'refuse': True}, {'steps': []}, sim.state(), commands), [])
 
     def test_a_full_turn_counts_as_heading_zero(self):
         self.assertEqual(bench.angle_gap(358, 0), 2)
@@ -370,7 +445,7 @@ class DatasetTest(unittest.TestCase):
         for row in build_dataset.build(800, 2, PROFILE):
             request = row['messages'][1]['content'].lower()
             steps = json.loads(row['messages'][2]['content'])['steps']
-            if len(steps) == 1 and steps[0]['action'] in ('turn', 'walk') and steps[0].get('degrees') != 180:
+            if len(steps) == 1 and steps[0]['action'] in ('turn', 'walk') and not (steps[0]['action'] == 'turn' and steps[0]['value'] == 180):
                 right = 'droite' in request or 'right' in request
                 left = 'gauche' in request or 'left' in request
                 self.assertEqual(steps[0]['direction'] == 'right', right, request)

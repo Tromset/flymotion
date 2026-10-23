@@ -1,16 +1,16 @@
 #!/bin/sh
-# Publishes FlyMotion on ollama.com: <user>/flymotion0.1 and <user>/flymotion0.1lite.
+# Publishes FlyMotion on ollama.com: <user>/flymotion0.2 and <user>/flymotion0.2lite.
 #   sh scripts/publish-ollama.sh [<ollama.com username>] [<name> ...]
-# Default user: Tromset. Default names: every model below. Example: sh scripts/publish-ollama.sh Tromset flymotion0.1lite
+# Default user: Tromset. Default names: every model below. Example: sh scripts/publish-ollama.sh Tromset flymotion0.2lite
 # Prerequisite: this machine's Ollama key is linked to the account (`ollama signin` once).
 # GitHub Actions runs this script on every change to main (.github/workflows/publish-ollama.yml).
 #   FLYMOTION_PRUNE=1  removes each model and its base after the push, to keep the disk free (used by CI)
 set -eu
 
-VERSION=0.1
+VERSION=0.2
 # Modelfile, published name. Keep in sync with scripts/gen_modelfiles.py and docs/ollama/.
-MODELS='Modelfile flymotion0.1
-Modelfile.lite flymotion0.1lite'
+MODELS='Modelfile flymotion0.2
+Modelfile.lite flymotion0.2lite'
 
 die() { printf 'FlyMotion: %s\n' "$*" >&2; exit 1; }
 
@@ -41,5 +41,5 @@ echo "$MODELS" | while read -r file name; do
 done
 
 printf '\nPublished FlyMotion %s. Anyone can now run:\n' "$VERSION"
-printf '  ollama pull %s/flymotion0.1        (computers with 8 GB)\n' "$user"
-printf '  ollama pull %s/flymotion0.1lite    (Raspberry Pi 5, 4 GB)\n' "$user"
+printf '  ollama pull %s/flymotion0.2        (computers with 8 GB)\n' "$user"
+printf '  ollama pull %s/flymotion0.2lite    (Raspberry Pi 5, 4 GB)\n' "$user"

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Builds the FlyMotion instruction dataset: French and English requests paired with the plan the robot should run.
 
-Every target plan is validated and compiled with the robot profile, and no request of the benchmark is used, so the
+Every target plan is validated, compiled with the robot profile and played in the simulator with the gait of Pollen's
+simulator, where it must walk for real (no time stepping in place). No request of the benchmark is used, so the
 benchmark stays a fair test of a model trained on this data.
   python3 training/build_dataset.py [--count 3000] [--out data/flymotion-commands]
 Writes train.jsonl and valid.jsonl in the chat format ({"messages": [system, user, assistant]}) used by TRL and mlx-lm.
@@ -16,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from flymotion.plan import compile_plan, load_profile, validate  # noqa: E402
 from flymotion.prompt import system_prompt  # noqa: E402
+from flymotion.robot import SimTransport, execute  # noqa: E402
 
 FR_NUMBERS = {1: 'un', 2: 'deux', 3: 'trois', 4: 'quatre', 5: 'cinq', 10: 'dix', 20: 'vingt', 30: 'trente', 50: 'cinquante'}
 EN_NUMBERS = {1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 10: 'ten', 20: 'twenty', 30: 'thirty', 50: 'fifty'}
@@ -63,7 +65,7 @@ def walk(rng, lang):
     else:
         text = rng.choice(['walk forward {d}', 'go forward {d}', 'move ahead {d}', 'walk {d} straight ahead']) if forward else \
             rng.choice(['walk back {d}', 'back up {d}', 'go backwards {d}', 'reverse {d}'])
-    return text.format(d=said), [{'action': 'walk', 'direction': 'forward' if forward else 'backward', 'meters': meters}]
+    return text.format(d=said), [{'action': 'walk', 'direction': 'forward' if forward else 'backward', 'value': meters}]
 
 
 def strafe(rng, lang):
@@ -77,7 +79,7 @@ def strafe(rng, lang):
         text = rng.choice(['décale-toi de {d} vers la {s}', 'fais un pas chassé de {d} à {s}', 'glisse à {s} sur {d}', 'marche de côté vers la {s} sur {d}'])
     else:
         text = rng.choice(['step {s} by {d}', 'strafe {s} {d}', 'sidestep {d} to the {s}', 'shuffle {d} to the {s}', 'walk sideways {d} to the {s}'])
-    return text.format(d=said, s=side), [{'action': 'walk', 'direction': 'left' if left else 'right', 'meters': meters}]
+    return text.format(d=said, s=side), [{'action': 'walk', 'direction': 'left' if left else 'right', 'value': meters}]
 
 
 def turn(rng, lang):
@@ -86,15 +88,15 @@ def turn(rng, lang):
     if rng.random() < 0.3:  # no number: 90 degrees, or a named half turn
         if rng.random() < 0.3:
             return (rng.choice(['fais demi-tour', 'retourne-toi']) if lang == 'fr' else rng.choice(['turn around', 'do a U-turn'])), \
-                [{'action': 'turn', 'direction': 'left', 'degrees': 180}]
+                [{'action': 'turn', 'direction': 'left', 'value': 180}]
         text = (f'tourne à {"gauche" if left else "droite"}' if lang == 'fr' else f'turn {direction}')
-        return text, [{'action': 'turn', 'direction': direction, 'degrees': 90}]
+        return text, [{'action': 'turn', 'direction': direction, 'value': 90}]
     degrees, said = angle(rng, lang)
     if lang == 'fr':
         text = rng.choice(['tourne à {s} {a}', 'pivote {a} vers la {s}', 'tourne-toi {a} sur la {s}']).format(s='gauche' if left else 'droite', a=said)
     else:
         text = rng.choice(['turn {s} {a}', 'rotate {a} to the {s}', 'spin {a} {s}']).format(s=direction, a=said)
-    return text, [{'action': 'turn', 'direction': direction, 'degrees': degrees}]
+    return text, [{'action': 'turn', 'direction': direction, 'value': degrees}]
 
 
 HEAD = {
@@ -111,7 +113,7 @@ HEAD = {
 
 def head(rng, lang):
     text, look = rng.choice(HEAD[lang])
-    return text, [{'action': 'head', 'look': look}]
+    return text, [{'action': 'look', 'direction': look}]
 
 
 SKILLS = {
@@ -130,13 +132,13 @@ SKILLS = {
 
 def skill(rng, lang):
     text, name = rng.choice(SKILLS[lang])
-    return text, [{'action': 'skill', 'skill': name}]
+    return text, [{'action': name}]
 
 
 def wait(rng, lang):
     seconds = rng.choice([1, 2, 3, 5])
     return (f'attends {seconds} seconde{"s" if seconds > 1 else ""}' if lang == 'fr' else f'wait {seconds} second{"s" if seconds > 1 else ""}'), \
-        [{'action': 'wait', 'seconds': seconds}]
+        [{'action': 'wait', 'value': seconds}]
 
 
 SHAPES = {3: ('triangle', 'triangle', 120), 4: ('carré', 'square', 90), 6: ('hexagone', 'hexagon', 60)}
@@ -153,7 +155,7 @@ def polygon(rng, lang):
         text = f'fais un {fr} de {said} de côté' + ('' if left else ' en tournant à droite')
     else:
         text = f'walk a {en} with {said} sides' + ('' if left else ', turning right')
-    steps = [{'action': 'walk', 'direction': 'forward', 'meters': meters}, {'action': 'turn', 'direction': 'left' if left else 'right', 'degrees': degrees}]
+    steps = [{'action': 'walk', 'direction': 'forward', 'value': meters}, {'action': 'turn', 'direction': 'left' if left else 'right', 'value': degrees}]
     return text, steps, sides
 
 
@@ -163,7 +165,7 @@ def circle(rng, lang):
     said = f'{round(radius * 100)} cm'
     text = (f'fais un cercle de {said} de rayon vers la {"gauche" if left else "droite"}' if lang == 'fr'
             else f'walk a circle of radius {said} to the {"left" if left else "right"}')
-    return text, [{'action': 'circle', 'direction': 'left' if left else 'right', 'meters': radius}]
+    return text, [{'action': 'circle', 'direction': 'left' if left else 'right', 'value': radius}]
 
 
 REFUSALS = {
@@ -173,59 +175,30 @@ REFUSALS = {
     'en': ['jump off the table', 'fly to the kitchen', 'climb the stairs', 'kick the dog', 'hit my sister', 'jump into the pool',
            'carry my backpack', 'run as fast as you can', 'knock the glass off the table', 'break the window', 'do a backflip'],
 }
-REFUSAL_SAY = {
-    'fr': ['Je ne peux pas faire ça : je ne sais ni sauter, ni voler, ni grimper, ni courir.', 'Je refuse : cela pourrait blesser quelqu\'un ou casser quelque chose.'],
-    'en': ['I cannot do that: I can only walk, turn, move my head and run my skills.', 'I will not do that: it could hurt someone or break something.'],
-}
-HARM = ('chien', 'frère', 'casse', 'verre', 'vase', 'dog', 'sister', 'glass', 'window')
-CHAT = {
-    'fr': [('quelle heure est-il ?', 'Je ne connais pas l\'heure : je planifie seulement mes mouvements.'),
-           ('comment tu t\'appelles ?', 'Je suis FlyMotion, le pilote de ce robot.'), ('tu es fatigué ?', 'Non, je suis prêt à bouger.'),
-           ('raconte-moi une blague', 'Je préfère bouger que parler : demande-moi un mouvement.')],
-    'en': [('what time is it?', 'I do not know the time: I only plan my motion.'), ('what is your name?', 'I am FlyMotion, the planner of this robot.'),
-           ('are you tired?', 'No, ready to move.'), ('tell me a joke', 'I am better at moving than joking: ask me for a move.')],
-}
+CHAT = {'fr': ['quelle heure est-il ?', 'comment tu t\'appelles ?', 'tu es fatigué ?', 'raconte-moi une blague'],
+        'en': ['what time is it?', 'what is your name?', 'are you tired?', 'tell me a joke']}
 STOPS = {'fr': ['stop', 'arrête-toi', 'stop !', 'arrête tout', 'ne bouge plus'], 'en': ['stop', 'freeze', 'stop now', 'halt', 'stop moving']}
 
 SINGLE = [walk, walk, walk, strafe, strafe, turn, turn, turn, head, skill, skill]
 JOIN = {'fr': [', puis ', ' puis ', ' et ensuite ', ', ensuite ', ' et '], 'en': [', then ', ' then ', ' and then ', ', and ', ' and ']}
-FR_SIDE = {'left': 'la gauche', 'right': 'la droite'}
-SAY_FR = {'walk': lambda s: {'forward': "j'avance", 'backward': 'je recule'}.get(s['direction'], 'je me décale')
-          + f' de {s["meters"]:g} m'.replace('.', ',') + (f' vers {FR_SIDE[s["direction"]]}' if s['direction'] in FR_SIDE else ''),
-          'turn': lambda s: f'je tourne de {s["degrees"]:g} degrés vers {FR_SIDE[s["direction"]]}',
-          'circle': lambda s: f'je fais un cercle vers {FR_SIDE[s["direction"]]}',
-          'head': lambda s: 'je bouge la tête', 'skill': lambda s: f'je lance {s["skill"]}', 'wait': lambda s: f'j\'attends {s["seconds"]:g} s'}
-SAY_EN = {'walk': lambda s: {'forward': 'walking forward', 'backward': 'backing up'}.get(s['direction'], f'stepping {s["direction"]}') + f' {s["meters"]:g} m',
-          'turn': lambda s: f'turning {s["degrees"]:g} degrees {s["direction"]}',
-          'circle': lambda s: f'walking a circle to the {s["direction"]}',
-          'head': lambda s: 'moving my head', 'skill': lambda s: f'running {s["skill"]}', 'wait': lambda s: f'waiting {s["seconds"]:g} s'}
-
-
-def say(steps, lang):
-    words = SAY_FR if lang == 'fr' else SAY_EN
-    parts = [words[s['action']](s) for s in steps]
-    text = (', puis ' if lang == 'fr' else ', then ').join(parts)
-    return text[0].upper() + text[1:] + '.'
 
 
 def sample(rng):
+    """A request and the plan the model should write for it: the actions, their values, their order."""
     lang = 'fr' if rng.random() < 0.5 else 'en'
     roll = rng.random()
     if roll < 0.06:
-        request = rng.choice(REFUSALS[lang])
-        return lang, request, {'say': REFUSAL_SAY[lang][1 if any(h in request for h in HARM) else 0], 'steps': []}
+        return lang, rng.choice(REFUSALS[lang]), {'steps': []}
     if roll < 0.09:
-        request, answer = rng.choice(CHAT[lang])
-        return lang, request, {'say': answer, 'steps': []}
+        return lang, rng.choice(CHAT[lang]), {'steps': []}
     if roll < 0.12:
-        return lang, rng.choice(STOPS[lang]), {'say': 'Je m\'arrête.' if lang == 'fr' else 'Stopping.', 'steps': [{'action': 'stop'}]}
+        return lang, rng.choice(STOPS[lang]), {'steps': [{'action': 'stop'}]}
     if roll < 0.16:
         request, steps, sides = polygon(rng, lang)
-        return lang, request, {'say': say(steps, lang).rstrip('.') + (f', {sides} fois.' if lang == 'fr' else f', {sides} times.'),
-                               'steps': steps, 'repeat': sides}
+        return lang, request, {'steps': steps, 'repeat': sides}
     if roll < 0.18:
         request, steps = circle(rng, lang)
-        return lang, request, {'say': say(steps, lang), 'steps': steps}
+        return lang, request, {'steps': steps}
     parts, steps = [], []
     for i in range(rng.choice([1, 1, 2, 2, 3])):
         text, more = (wait if i and rng.random() < 0.1 else rng.choice(SINGLE))(rng, lang)
@@ -235,22 +208,27 @@ def sample(rng):
     for part in parts[1:]:
         request += rng.choice(JOIN[lang]) + part
     request = request[0].upper() + request[1:] + rng.choice(['.', '', ' !' if lang == 'fr' else '!', '.'])
-    return lang, request, {'say': say(steps, lang), 'steps': steps}
+    return lang, request, {'steps': steps}
 
 
 def build(count, seed, profile):
     rng = random.Random(seed)
     bench = {c['request'].lower().strip(' .!?') for c in json.loads((ROOT / 'bench/cases.json').read_text())}
     prompt = system_prompt(profile)
+    gaited = load_profile('microduck-sim')  # the strictest gait we have
     rows, seen = [], set()
     while len(rows) < count:
         lang, request, plan = sample(rng)
         key = request.lower().strip(' .!?')
         if key in bench or key in seen:
             continue
-        plan = {'say': plan['say'], 'repeat': plan.get('repeat', 1), 'steps': plan['steps']}  # the schema's order
+        plan = {'safe': bool(plan['steps']), 'steps': plan['steps'], 'repeat': plan.get('repeat', 1)}  # the schema's order
         assert not validate(plan, profile), (request, plan, validate(plan, profile))
         compile_plan(plan, profile)
+        commands, _ = compile_plan(plan, gaited)
+        sim = SimTransport(gaited)
+        execute(commands, sim, gaited)
+        assert not sim.in_place, (request, plan, sim.in_place)
         seen.add(key)
         rows.append({'messages': [{'role': 'system', 'content': prompt}, {'role': 'user', 'content': request},
                                   {'role': 'assistant', 'content': json.dumps(plan, ensure_ascii=False)}], 'lang': lang})

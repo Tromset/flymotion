@@ -1,14 +1,14 @@
 """JSON lines protocol for front ends such as the Electron test app (app/): one request per line on stdin,
 replies and events on stdout. The bridge stays the only place that plans, validates, compiles and drives the robot.
 
-  python -m flymotion serve [--robot microduck] [--model Tromset/flymotion0.1]
+  python -m flymotion serve [--robot microduck] [--model Tromset/flymotion0.2]
 
 Requests carry an "id" that their reply repeats:
   {"id": 1, "type": "hello"}                                  -> profile, model, Ollama address, robot profiles
   {"id": 2, "type": "profile", "robot": "microduck-sim"}       -> plans for another robot profile from now on
   {"id": 3, "type": "models"}                                 -> the models Ollama has, FlyMotion ones first
   {"id": 4, "type": "plan", "request": "fais un carré", "model": "..."}   -> plan, commands, warnings, simulated pose
-  {"id": 5, "type": "compile", "plan": {"say": "", "steps": [...]}}      -> the same without the model
+  {"id": 5, "type": "compile", "plan": {"repeat": 1, "steps": [...]}}     -> the same without the model
   {"id": 6, "type": "run", "plan": {...}, "robot": "microduck", "target": "tcp:duck.local:7000"}
                                                               -> streams {"id": 6, "event": "command", "index": i}
   {"id": 7, "type": "stop"}                                   -> interrupts a run (it ends with robot.stop)
@@ -24,6 +24,7 @@ from queue import Queue
 from . import __version__
 from .plan import ROBOTS, PlanError, compile_plan, duration, load_profile, parse
 from .planner import DEFAULT_MODEL, Planner, ollama_url
+from .prompt import say
 from .robot import SimTransport, connect, execute
 
 
@@ -61,6 +62,7 @@ class Server:
 
     def result(self, plan, info=None):
         commands, warnings = compile_plan(plan, self.profile)
+        plan = {'say': say(plan), **plan}  # a plan written by hand gets its sentence too (the app speaks French)
         return {'plan': plan, 'commands': commands, 'warnings': warnings, 'duration': round(duration(commands), 2),
                 'sim': simulate(commands, self.profile), **(info or {})}
 

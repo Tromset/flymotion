@@ -48,8 +48,8 @@ jobs:
             models=
             for file in $changed; do
               case $file in
-                Modelfile) models="$models flymotion0.1" ;;
-                Modelfile.lite) models="$models flymotion0.1lite" ;;
+                Modelfile) models="$models flymotion0.2" ;;
+                Modelfile.lite) models="$models flymotion0.2lite" ;;
                 scripts/publish-ollama.sh|.github/workflows/publish-ollama.yml) models=all; break ;;
               esac
             done

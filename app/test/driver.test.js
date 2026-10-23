@@ -109,6 +109,37 @@ test('a plan waits for the respawn to end before it starts', async () => {
   assert.equal(started, true);
 });
 
+test('moves last in simulated seconds, however slowly the physics runs', async () => {
+  const { rl } = fakeSimulator();
+  rl.data.time = 0;
+  const driver = driverFor(rl, [], []);
+  // The physics at a tenth of real time: 1 s of walking takes 10 s of wall clock (0.1 s with timeScale 0.01).
+  const clock = setInterval(() => (rl.data.time += 0.001), 1);
+  const started = Date.now();
+  await driver.play([{ kind: 'move', vx: 0.25, vy: 0, vyaw: 0, seconds: 1 }, { kind: 'stop' }]);
+  clearInterval(clock);
+  assert.ok(rl.data.time >= 1, `stopped after ${rl.data.time} simulated seconds`);
+  assert.ok(Date.now() - started > 200, 'paced by the simulator, not the wall clock');
+});
+
+test('a sitting duck stands up before it walks', async () => {
+  const { rl, actions } = fakeSimulator();
+  rl.mode = 'sitstand';
+  const events = [];
+  const driver = driverFor(rl, events, actions);
+  driver.source.onAction = (name) => {
+    actions.push(name);
+    if (name === 'walk') setTimeout(() => (rl.mode = 'walk'), 20); // the sitstand policy stands it up
+  };
+  let walkingWhileSitting = false;
+  const watch = setInterval(() => (walkingWhileSitting ||= driver.source.isActive() && rl.mode !== 'walk'), 1);
+  await driver.play([{ kind: 'move', vx: 0.25, vy: 0, vyaw: 0, seconds: 1 }, { kind: 'stop' }]);
+  clearInterval(watch);
+  assert.deepEqual(actions, ['walk']);
+  assert.equal(walkingWhileSitting, false);
+  assert.equal(events.at(-1).mode, 'walk');
+});
+
 test('poses are reported in the frame the duck had when the plan started', () => {
   const { rl } = fakeSimulator();
   const driver = driverFor(rl, [], []);

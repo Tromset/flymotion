@@ -181,6 +181,7 @@ The icon is `FlyMotion.app` on macOS, `flymotion.desktop` on Linux (also in the 
 It needs Python 3.9 or later (the bridge runs as `python3 -m flymotion serve`; set `FLYMOTION_PYTHON` to use another interpreter), Ollama (`OLLAMA_HOST` is passed through), and a network connection: the simulator loads from its Hugging Face Space, and MuJoCo and onnxruntime from their CDN. `FLYMOTION_SIM_URL` points the app at another build, for example `http://localhost:5173/?boot=1` from the Space's `npm run dev`.
 
 - FlyMotion is one more input source of the simulator, like its keyboard or gamepad: velocities go to the walking policy, head angles to its head command, `kick_left`, `kick_right`, `roulade`, `ground_pick` and `sit_toggle` to the matching policies (a kick gets a ball first). `polite-bow` has no policy in the simulator and is reported as skipped.
+- Commands last in simulated seconds, not wall-clock seconds: on a machine where the physics runs slower than real time (no GPU, a throttled window), the duck walks the whole plan, only more slowly. Before a move, a duck that is sitting, in head mode or getting up after a fall is first brought back to walking, as the simulator ignores every move otherwise.
 - Each plan shows where the bridge expects the duck to end (its kinematic simulator) and where the physics put it, with the gap.
 - "Plan JSON" compiles a plan you write, without the model. Escape, or Stop, stops the duck and any run on the robot.
 - The arrows, WASD and the mouse still drive the simulator; they take over from FlyMotion while held.

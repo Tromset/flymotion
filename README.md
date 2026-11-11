@@ -39,6 +39,14 @@ ollama pull Tromset/flymotion0.2lite
 npm start
 ````
 
+To update later (the code, the app's dependencies and the FlyMotion models you have installed), one command from the `flymotion` folder:
+
+````sh
+npm run update
+````
+
+With the `flymotion` command installed (`npm run shortcut`, below), `flymotion update` does the same from any folder.
+
 ````sh
 npm run shortcut
 ````
@@ -174,6 +182,7 @@ npm install
 npm start               # from the repository root
 npm run shortcut        # once: a FlyMotion icon on the desktop, and the `flymotion` command
 flymotion               # then from any folder, or double-click the icon
+flymotion update        # later: latest code, dependencies and installed models
 ```
 
 The icon is `FlyMotion.app` on macOS, `flymotion.desktop` on Linux (also in the applications menu) and `FlyMotion.lnk` on Windows. It remembers where the repository, Electron and Python are: run `npm run shortcut` again after moving the folder. `npm run unshortcut` removes the icon and the command. npm only runs its own commands (`start`, `test`...) without `run`, so the shortcut is `npm run shortcut`. If `npm link` is refused, your global npm folder needs administrator rights: use `sudo npm run shortcut`, or a Node installed with nvm.

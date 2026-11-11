@@ -12,6 +12,7 @@
     "start": "electron .",
     "shortcut": "node app/shortcut.js",
     "unshortcut": "node app/shortcut.js --remove",
+    "update": "node app/update.js",
     "test": "node --test \"app/test/**/*.test.js\""
   },
   "dependencies": {
